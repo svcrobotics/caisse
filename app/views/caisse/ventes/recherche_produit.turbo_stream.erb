@@ -1,0 +1,20 @@
+<%= turbo_stream.replace "form_code_barre" do %>
+  <%= render partial: "ventes/form_code_barre" %>
+<% end %>
+
+<%= turbo_stream.update "resultat_produits" do %>
+  <%= render partial: "ventes/liste_produits", locals: { produits: @produits, quantites: @quantites } %>
+<% end %>
+
+<%= turbo_stream.append "body" do %>
+  <script>
+    setTimeout(() => {
+      const champ = document.getElementById("code_barre");
+      if (champ) {
+        champ.focus();
+        champ.select();
+      }
+    }, 100);
+  </script>
+<% end %>
+

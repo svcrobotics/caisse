@@ -1,0 +1,35 @@
+<tr class="border-t">
+  <td class="px-4 py-2 text-center"><%= produit.nom %></td>
+  <td class="px-4 py-2 text-center"><%= quantite %></td>
+  <td class="px-4 py-2 text-center whitespace-nowrap">
+    <% if produit.en_promo? && produit.prix_promo.present? %>
+      <span class="relative inline-block text-base text-gray-500 font-medium">
+        <span class="inline-block"><%= number_to_currency(produit.prix) %></span>
+        <span style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background-color: red; transform: rotate(-15deg); transform-origin: left center;"></span>
+      </span>
+      <span class="ml-2 text-red-600 font-bold text-lg"><%= number_to_currency(produit.prix_promo) %></span>
+    <% else %>
+      <%= number_to_currency(produit.prix) %>
+    <% end %>
+  </td>
+  <td class="px-4 py-2 text-center">
+    <%= form_with url: caisse.modifier_remise_ventes_path, method: :post, local: true do %>
+      <%= hidden_field_tag :produit_id, produit.id %>
+      <%= select_tag :remise,
+        options_for_select((0..70).step(10).map { |v| ["#{v} %", v] }, selected: remise.to_i),
+        class: "w-24 border rounded text-right",
+        onchange: "this.form.submit();" %>
+    <% end %>
+  </td>
+  <td class="px-4 py-2 text-center font-semibold text-green-700">
+    <%= number_to_currency(total_produit) %>
+  </td>
+  <td class="px-4 py-2 text-center text-sm text-gray-500">
+    <span class="inline-block px-2 py-1 rounded bg-gray-100 text-gray-600">
+      Stock : <%= produit.stock %>
+    </span>
+  </td>
+  <td class="px-4 py-2 text-center">
+    <%= button_to "Retirer", retirer_produit_ventes_path(produit_id: produit.id), method: :post, class: "text-red-600" %>
+  </td>
+</tr>

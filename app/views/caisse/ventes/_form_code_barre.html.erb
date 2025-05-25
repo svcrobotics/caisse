@@ -1,0 +1,10 @@
+<%= turbo_frame_tag "form_code_barre" do %>
+  <%= form_with url: recherche_produit_ventes_path, method: :post, data: { turbo_frame: "form_code_barre" } do |f| %>
+    <div class="mb-4">
+      <%= f.label :code_barre, "Code-barres", class: "block font-medium" %>
+      <%= f.text_field :code_barre, autofocus: true, autocomplete: "off",
+            class: "mt-1 block w-full rounded border-gray-300 shadow-sm",
+            placeholder: "Scannez ou tapez le code-barres" %>
+    </div>
+  <% end %>
+<% end %>

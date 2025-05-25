@@ -1,0 +1,15 @@
+<% if @avoir && !@avoir.utilise && @avoir.created_at >= 1.year.ago %>
+  <div class="bg-green-100 p-4 rounded">
+    <p>✅ Avoir n°<strong><%= @avoir.id.to_s.rjust(6, "0") %></strong> — Montant : <%= number_to_currency(@avoir.montant) %></p>
+    <% nouveau_total = [@total_vente - @avoir.montant, 0].max %>
+    <p>Total de la vente : <%= number_to_currency(@total_vente) %></p>
+    <p><strong>À payer après avoir : <%= number_to_currency(nouveau_total) %></strong></p>
+    <% if nouveau_total == 0 %>
+      <p class="text-sm text-gray-600">Un avoir de <%= number_to_currency(@avoir.montant - @total_vente) %> sera généré automatiquement.</p>
+    <% end %>
+  </div>
+<% else %>
+  <div class="bg-red-100 p-4 rounded text-red-700">
+    ❌ Avoir introuvable, expiré ou déjà utilisé.
+  </div>
+<% end %>

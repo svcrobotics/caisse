@@ -1,0 +1,41 @@
+<table class="w-full text-sm text-left border-collapse">
+  <thead class="bg-gray-200 text-gray-700">
+    <tr>
+      <th class="px-3 py-2">Catégorie</th>
+      <th class="px-3 py-2">Nom</th>
+      <th class="px-3 py-2">Stock</th>
+      <th class="px-3 py-2">Code-barres</th>
+      <th class="px-3 py-2">Qté</th>
+      <th class="px-3 py-2">Prix unitaire</th>
+      <th class="px-3 py-2">Total</th>
+      <th class="px-3 py-2">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% total_global = 0 %>
+    <% quantites.each do |id, quantite| %>
+      <% produit = produits[id] %>
+      <% total = quantite * produit.prix.to_f %>
+      <% total_global += total %>
+      <tr class="border-b">
+        <td class="px-3 py-2"><%= produit.categorie.capitalize %></td>
+        <td class="px-3 py-2"><%= produit.nom %></td>
+        <td class="px-3 py-2"><%= produit.stock %></td>
+        <td class="px-3 py-2"><%= produit.code_barre %></td>
+        <td class="px-3 py-2"><%= quantite %></td>
+        <td class="px-3 py-2"><%= number_to_currency(produit.prix) %></td>
+        <td class="px-3 py-2 text-right"><%= number_to_currency(total) %></td>
+        <td class="px-3 py-2 text-center">
+          <%= button_to "🗑", retirer_produit_ventes_path(id: produit.id), method: :post, form: { data: { turbo_frame: "resultat_produits" } }, class: "text-red-600 hover:underline text-sm" %>
+        </td>
+
+      </tr>
+    <% end %>
+  </tbody>
+  <tfoot class="bg-gray-100 font-semibold">
+    <tr>
+      <td colspan="6" class="text-right px-3 py-2">Total :</td>
+      <td class="text-right px-3 py-2"><%= number_to_currency(total_global) %></td>
+    </tr>
+  </tfoot>
+</table>

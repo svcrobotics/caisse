@@ -1,0 +1,133 @@
+<div class="max-w-5xl mx-auto p-6">
+  <h1 class="text-2xl font-bold mb-6">💰 Historique des ventes</h1>
+
+  <!-- 🔍 Formulaire de recherche de ventes -->
+  <div class="mb-4">
+    <%= form_with url: ventes_path, method: :get, class: "flex flex-wrap items-end gap-2" do |form| %>
+
+      <!-- 🔢 Recherche par numéro de vente -->
+      <%= form.number_field :numero, placeholder: "N° vente", value: params[:numero],
+        class: "w-32 p-2 border border-gray-300 rounded-md shadow-sm" %>
+
+      <!-- 📅 Filtre par date -->
+      <%= form.date_field :date, value: params[:date],
+        class: "p-2 border border-gray-300 rounded-md shadow-sm" %>
+
+      <!-- 🧾 Recherche par code-barres produit -->
+      <%= form.text_field :code_barre, placeholder: "Code-barres produit", value: params[:code_barre],
+        class: "w-48 p-2 border border-gray-300 rounded-md shadow-sm" %>
+
+      <!-- 👤 Recherche par nom de client -->
+      <%= form.text_field :client_nom, placeholder: "Nom du client", value: params[:client_nom],
+        class: "w-48 p-2 border border-gray-300 rounded-md shadow-sm" %>
+
+      <%= form.submit "Filtrer", class: "px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" %>
+    <% end %>
+  </div>
+
+<!-- ℹ️ Message d’aide -->
+<div class="bg-blue-50 border-l-4 border-blue-400 text-blue-800 p-4 mb-4 rounded-md text-sm">
+  <p><strong>🔎 Astuces :</strong> Vous pouvez filtrer les ventes par :</p>
+  <ul class="list-disc pl-5 mt-1">
+    <li><strong>Numéro de vente</strong> (ex: 125)</li>
+    <li><strong>Date de vente</strong> (ex: 2025-05-25)</li>
+    <li><strong>Code-barres</strong> d’un produit vendu</li>
+    <li><strong>Nom du client</strong> ayant effectué l’achat</li>
+  </ul>
+</div>
+
+
+  <div class="mb-4 text-right">
+    <%= link_to "➕ Nouvelle vente", new_vente_path,
+      class: "bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" %>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 mb-6">
+    <div class="bg-blue-100 border border-blue-300 p-4 rounded">
+      <p class="text-sm text-blue-800 font-semibold">📅 Ventes aujourd’hui</p>
+      <p class="text-lg font-bold">
+        <%= @stats[:today_count] %> ventes — <%= number_to_currency(@stats[:today_total]) %>
+      </p>
+    </div>
+
+    <div class="bg-green-100 border border-green-300 p-4 rounded">
+      <p class="text-sm text-green-800 font-semibold">📆 Ventes ce mois-ci</p>
+      <p class="text-lg font-bold">
+        <%= @stats[:month_count] %> ventes — <%= number_to_currency(@stats[:month_total]) %>
+      </p>
+    </div>
+  </div>
+
+  <h1 class="text-2xl font-bold mb-6">📦 Export des ventes</h1>
+
+  <%= form_with url: export_ventes_path, method: :get, local: true do %>
+    <div class="mb-4">
+      <label for="mois" class="block font-semibold mb-1">Sélectionnez le mois :</label>
+      <%= month_field_tag :mois, Date.today.strftime("%Y-%m"), class: "border rounded px-3 py-2" %>
+    </div>
+
+    <%= submit_tag "📤 Exporter le fichier Excel", class: "bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" %>
+  <% end %>
+  <br>
+
+  <% if @ventes.any? %>
+    <div class="grid gap-4">
+      <% @ventes.each do |vente| %>
+        <div class="bg-white shadow rounded-lg p-4 flex justify-between items-center">
+          <div>
+            <p class="font-semibold text-lg">
+              🧾 Vente n°<%= vente.id %> — <%= l(vente.date_vente || vente.created_at, format: :short) %>
+            </p>
+            <p class="text-sm text-gray-600">
+              Client : <%= vente.client&.nom || "Sans client" %> — 
+              Paiement :
+              <%= [
+                ("CB: #{number_to_currency(vente.cb)}" if vente.cb.to_f > 0),
+                ("Espèces: #{number_to_currency(vente.espece)}" if vente.espece.to_f > 0),
+                ("Chèque: #{number_to_currency(vente.cheque)}" if vente.cheque.to_f > 0),
+                ("AMEX: #{number_to_currency(vente.amex)}" if vente.amex.to_f > 0)
+              ].compact.join(" · ").html_safe %> — 
+              Total : <strong><%= number_to_currency(vente.total_net) %></strong>
+            </p>
+          </div>
+
+          <div class="flex gap-2">
+            <%= link_to "📝 Voir", vente_path(vente),
+              class: "bg-gray-100 hover:bg-gray-200 text-black px-4 py-2 rounded" %>
+
+            <%= link_to "🖨️ Imprimer ticket", imprimer_ticket_vente_path(vente), method: :post,
+            class: "bg-gray-100 hover:bg-gray-200 text-black px-4 py-2 rounded" %>
+
+            <% unless vente.annulee? %>
+              <details class="mb-4">
+                <summary class="cursor-pointer text-red-600 font-bold">❌ Annuler la vente</summary>
+                <div class="mt-2 border rounded p-4 bg-red-50">
+                  <%= form_with url: annuler_vente_path(vente), method: :patch, local: true do |f| %>
+                    <div class="mb-3">
+                      <%= f.label :motif_annulation, "Motif de l'annulation", class: "block text-sm font-medium" %>
+                      <%= f.text_area :motif_annulation, rows: 3, class: "w-full border rounded p-2" %>
+                    </div>
+
+                    <% if vente.espece.to_f == 0 %>
+                      <div class="mb-3">
+                        <%= label_tag :remboursement, "Type de remboursement", class: "block text-sm font-medium" %>
+                        <%= select_tag :remboursement, options_for_select([["Aucun", "aucun"], ["Espèces", "especes"], ["CB (Sur le TPE)", "cb"], ["Avoir", "avoir"]]), class: "w-full border rounded p-2" %>
+                      </div>
+                    <% end %>
+
+                    <%= f.submit "Confirmer l'annulation", class: "bg-red-600 text-white px-4 py-2 rounded" %>
+                  <% end %>
+                </div>
+              </details>
+            <% else %>
+              <p class="text-red-500 font-bold">Vente annulée.</p>
+              <p class="text-sm text-gray-600">Motif : <%= vente.motif_annulation %></p>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-center text-gray-500">Aucune vente enregistrée.</p>
+  <% end %>
+</div>

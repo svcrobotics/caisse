@@ -1,0 +1,51 @@
+<table class="w-full text-sm text-left border-collapse">
+  <thead class="bg-gray-200 text-gray-700">
+    <tr>
+      <th class="px-3 py-2">Nom</th>
+      <th class="px-3 py-2">Code-barres</th>
+      <th class="px-3 py-2">Prix unitaire</th>
+      <th class="px-3 py-2">Quantité</th>
+      <th class="px-3 py-2">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% produits.each do |id, produit| %>
+      <% next if produit.nil? %>
+      <% qte = quantites[id] || 1 %>
+      <tr class="border-b">
+        <td class="px-3 py-2"><%= produit.nom %></td>
+        <td class="px-3 py-2"><%= produit.code_barre %></td>
+        <td class="px-3 py-2"><%= number_to_currency(produit.prix_affiche) %></td>
+        <td class="px-3 py-2">
+          <%= form_with url: modifier_quantite_ventes_path, method: :post,
+                data: { turbo_frame: "resultat_produits" }, class: "inline-block" do |f| %>
+            <%= hidden_field_tag :produit_id, produit.id %>
+            <%= number_field_tag :quantite, qte, min: 1, max: produit.stock,
+            class: "w-16 border rounded px-1 py-0.5 text-center",
+              onchange: "this.form.submit()" %>
+          <% end %>
+        </td>
+        <td class="px-3 py-2 text-right"><%= number_to_currency(produit.prix_affiche * qte) %></td>
+        <td class="px-3 py-2 text-center">
+          <%= form_with url: retirer_produit_ventes_path, method: :post,
+                data: { turbo_frame: "resultat_produits" }, class: "inline-block" do |f| %>
+            <%= hidden_field_tag :produit_id, produit.id %>
+            <%= submit_tag "🗑", class: "text-red-600 hover:underline text-sm" %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+  <tfoot class="bg-gray-100 font-semibold">
+    <tr>
+      <td colspan="4" class="text-right px-3 py-2">Total :</td>
+      <td class="text-right px-3 py-2">
+        <%= number_to_currency(
+              produits.sum { |id, produit| (quantites[id] || 1) * produit.prix }
+            ) %>
+      </td>
+    </tr>
+  </tfoot>
+</table>
+
+
