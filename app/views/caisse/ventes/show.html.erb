@@ -70,6 +70,9 @@
         <p>
           <strong>Total payé :</strong> <%= number_to_currency(@vente.total_net) %>
         </p>
+        <% if @vente.remise_globale.to_f > 0 %>
+          <p><strong>Remise globale :</strong> -<%= number_to_currency(@vente.remise_globale) %></p>
+        <% end %>
       <% end %>
   </div>
 

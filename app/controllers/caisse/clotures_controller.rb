@@ -74,7 +74,6 @@ module Caisse
       @total_remises = @remises.round(2)
     end
 
-
     ##
     # Génère une clôture mensuelle à partir des clôtures journalières du mois donné,
     # puis imprime le ticket correspondant.
@@ -109,18 +108,61 @@ module Caisse
       ventes_du_mois = Caisse::Vente.includes(ventes_produits: :produit)
         .where(date_vente: date.beginning_of_month..date.end_of_month, annulee: [false, nil])
 
+      # Initialisation
+      ttc_0 = ttc_20 = 0.to_d
+      remises_globales_total = 0.to_d
+      remises_produits_total = 0.to_d
+
+      ventes_du_mois.each do |vente|
+        remises_globales_total += vente.remise_globale.to_d if vente.respond_to?(:remise_globale)
+
+        vente.ventes_produits.each do |vp|
+          produit = vp.produit
+          prix_unitaire = vp.prix_unitaire.to_d > 0 ? vp.prix_unitaire.to_d : vp.produit.prix.to_d
+          quantite = vp.quantite
+          remise_pct = vp.remise.to_d
+          brut = prix_unitaire * quantite
+          remise_euros = (brut * remise_pct / 100).round(2)
+          remises_produits_total += remise_euros
+          net = brut - remise_euros
+
+          if vp.produit.etat == "neuf"
+            ttc_20 += net
+          else
+            ttc_0 += net
+          end
+        end
+      end
+
+      # Répartition remise globale
+      ttc_total_initial = ttc_0 + ttc_20
+      if ttc_total_initial > 0 && remises_globales_total > 0
+        coef = remises_globales_total / ttc_total_initial
+        ttc_0_remise = (ttc_0 * coef).round(2)
+        ttc_20_remise = (remises_globales_total - ttc_0_remise).round(2)
+        ttc_0 -= ttc_0_remise
+        ttc_20 -= ttc_20_remise
+      end
+
       total_cb      = ventes_du_mois.sum(:cb).to_d
       total_amex    = ventes_du_mois.sum(:amex).to_d
       total_especes = ventes_du_mois.sum(:espece).to_d
       total_cheque  = ventes_du_mois.sum(:cheque).to_d
       total_articles = ventes_du_mois.sum { |v| v.ventes_produits.sum(&:quantite) }
 
+      ht_20 = (ttc_20 / 1.2).round(2)
+      tva_20 = (ttc_20 - ht_20).round(2)
+      ht_0 = ttc_0
+      total_ht = (ht_0 + ht_20).round(2)
+      total_tva = tva_20
+      total_ttc = (ttc_0 + ttc_20).round(2)
+
       cloture = Caisse::Cloture.create!(
         categorie: "mensuelle",
         date: date.end_of_month,
-        total_ht: clotures_jour.sum(:total_ht),
-        total_tva: clotures_jour.sum(:total_tva),
-        total_ttc: clotures_jour.sum(:total_ttc),
+        total_ht: total_ht,
+        total_tva: total_tva,
+        total_ttc: total_ttc,
         total_versements: total_versements,
         total_cb: total_cb,
         total_amex: total_amex,
@@ -131,12 +173,12 @@ module Caisse
         total_clients: clotures_jour.sum(:total_clients),
         total_articles: total_articles,
         ticket_moyen: clotures_jour.average(:ticket_moyen).to_f.round(2),
-        ht_0: clotures_jour.sum(:ht_0),
-        ht_20: clotures_jour.sum(:ht_20),
-        ttc_0: clotures_jour.sum(:ttc_0),
-        ttc_20: clotures_jour.sum(:ttc_20),
-        tva_20: clotures_jour.sum(:tva_20),
-        total_remises: clotures_jour.sum(:total_remises),
+        ht_0: ht_0,
+        ht_20: ht_20,
+        ttc_0: ttc_0,
+        ttc_20: ttc_20,
+        tva_20: tva_20,
+        total_remises: (remises_produits_total + remises_globales_total).round(2),
         total_annulations: total_annulations
       )
 
@@ -195,11 +237,11 @@ module Caisse
       redirect_to clotures_path, notice: "✅ Clôture mensuelle de #{mois} enregistrée et imprimée."
     end
 
-
     ##
     # Imprime un ticket de clôture (mensuelle ou journalière)
     def imprimer
       cloture = Caisse::Cloture.find(params[:id])
+      total_ventes = cloture.total_ventes
       jour = cloture.date
       ventes_annulees = Caisse::Vente.where(date_vente: jour.all_day, annulee: true)
       total_annulations = ventes_annulees.sum(&:total_net)
@@ -222,32 +264,68 @@ module Caisse
 
       total_cb      = ventes.sum(:cb).to_d
       total_amex    = ventes.sum(:amex).to_d
-      total_especes = ventes.sum(:espece).to_d
+      total_especes = ventes.sum do |vente|
+        espece = vente.espece.to_d
+        total_net = vente.total_net.to_d
+        autres_paiements = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+
+        rendu = [espece - (total_net - autres_paiements), 0].max
+        espece - rendu
+      end.round(2)
+
       total_cheque  = ventes.sum(:cheque).to_d
       total_encaisse = total_cb + total_amex + total_especes + total_cheque
 
-      ht_0 = ttc_0 = ht_20 = ttc_20 = total_remises = 0
+      # Initialisation
+      ht_0 = ttc_0 = ht_20 = ttc_20 = 0.to_d
+      remises_produits_total = 0.to_d
+      remises_globales_total = 0.to_d
+
       ventes.each do |vente|
+        # Remise globale
+        remise_globale = vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0
+        remises_globales_total += remise_globale
+
+        # Remises par produit et calculs TVA
         vente.ventes_produits.each do |vp|
-          prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : vp.produit.prix
-          remise = vp.remise.to_f
-          montant = prix_unitaire * vp.quantite * (1 - remise / 100.0)
-          total_remises += prix_unitaire * vp.quantite * (remise / 100.0)
+          prix_unitaire = vp.prix_unitaire.to_d > 0 ? vp.prix_unitaire.to_d : vp.produit.prix.to_d
+          quantite = vp.quantite
+          remise_pct = vp.remise.to_d
+          brut = prix_unitaire * quantite
+          remise_euros = (brut * remise_pct / 100).round(2)
+          remises_produits_total += remise_euros
+          net = brut - remise_euros
+
           if vp.produit.etat == "neuf"
-            ttc_20 += montant
+            ttc_20 += net
           else
-            ttc_0 += montant
+            ttc_0 += net
           end
         end
       end
 
-      ht_20  = (ttc_20 / 1.2).round(2)
+      # Répartition de la remise globale sur les produits
+      ttc_total_initial = ttc_0 + ttc_20
+      if ttc_total_initial > 0 && remises_globales_total > 0
+        coef = remises_globales_total / ttc_total_initial
+        ttc_0  -= (ttc_0 * coef).round(2)
+        ttc_20 -= (ttc_20 * coef).round(2)
+      end
+
+      # Calcul HT / TVA
+      ht_20 = (ttc_20 / 1.2).round(2)
       tva_20 = (ttc_20 - ht_20).round(2)
-      ht_0   = ttc_0
+      ht_0 = ttc_0
+
       total_ht  = (ht_0 + ht_20).round(2)
       total_tva = tva_20
-      total_ttc = (ttc_0 + ttc_20).round(2)
-      ticket_moyen = ventes.any? ? (total_ttc / ventes.count).round(2) : 0
+      total_ttc = ventes.sum(&:total_net).round(2)  # 💡 net inclut déjà les remises
+
+      # Remises
+      total_remises = (remises_produits_total + remises_globales_total).round(2)
+
+      # Ticket moyen
+      ticket_moyen = total_ventes.positive? ? (total_ttc / total_ventes).round(2) : 0
 
       fond_caisse_initial = cloture.fond_caisse_initial
       fond_caisse_final = cloture.fond_caisse_final
@@ -278,30 +356,40 @@ module Caisse
         fond_caisse_initial: fond_caisse_initial,
         fond_caisse_final: fond_caisse_final,
         total_versements: cloture.total_versements || 0,
-        details_ventes: ventes.flat_map do |vente|
-          vente.ventes_produits.map do |vp|
-            produit = vp.produit
-            prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : produit.prix
-            remise = vp.remise.to_f
-            montant_total = (prix_unitaire * vp.quantite * (1 - remise / 100)).round(2)
-            {
-              numero_vente: vente.id,
-              heure: vente.date_vente.strftime("%H:%M"),
-              nom: produit.nom.truncate(25),
-              etat: produit.etat.capitalize,
-              paiement: "MULTI",
-              multi: [
-                { "mode" => "CB", "montant" => vente.cb.to_f },
-                { "mode" => "Espèces", "montant" => vente.espece.to_f },
-                { "mode" => "Chèque", "montant" => vente.cheque.to_f },
-                { "mode" => "AMEX", "montant" => vente.amex.to_f }
-              ].reject { |p| p["montant"] <= 0 },
-              quantite: vp.quantite,
-              prix_unitaire: prix_unitaire,
-              remise: remise,
-              montant_total: montant_total
-            }
-          end
+        details_ventes: ventes.map do |vente|
+          total_net = vente.total_net.to_d
+          espece = vente.espece.to_d
+          autres = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+          rendu = [espece - (total_net - autres), 0].max
+
+          {
+            numero_vente: vente.id,
+            heure: vente.date_vente.strftime("%H:%M"),
+            paiement: "MULTI",
+            multi: [
+              { "mode" => "CB", "montant" => vente.cb.to_f },
+              { "mode" => "Espèces", "montant" => espece },
+              { "mode" => "Chèque", "montant" => vente.cheque.to_f },
+              { "mode" => "AMEX", "montant" => vente.amex.to_f }
+            ].reject { |p| p["montant"] <= 0 } + (rendu > 0 ? [{ "mode" => "Rendu", "montant" => rendu }] : []),
+            remise_globale: vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0,
+            produits: vente.ventes_produits.map do |vp|
+              produit = vp.produit
+              prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : produit.prix
+              remise = vp.remise.to_f
+              montant_total = (prix_unitaire * vp.quantite * (1 - remise / 100)).round(2)
+
+              {
+                nom: produit.nom.truncate(25),
+                etat: produit.etat.capitalize,
+                quantite: vp.quantite,
+                prix_unitaire: prix_unitaire,
+                remise: remise,
+                montant_total: montant_total
+              }
+            end,
+            total_vente: vente.total_net
+          }
         end,
         details_annulations: ventes_annulees.map do |vente|
           {
@@ -347,13 +435,14 @@ module Caisse
       )
 
       texte = cloture_ticket_texte(data)
+
+      FileUtils.mkdir_p(Rails.root.join("tmp"))
       File.write(Rails.root.join("tmp/z_ticket.txt"), texte)
       system("iconv -f UTF-8 -t CP858 tmp/z_ticket.txt -o tmp/z_ticket_cp858.txt")
       system("lp", "-d", "SEWOO_LKT_Series", "tmp/z_ticket_cp858.txt")
 
       redirect_to clotures_path, notice: "✅ Clôture imprimée avec succès."
     end
-
 
     ##
     # Crée une clôture journalière (ticket Z) si elle n'existe pas déjà pour le jour donné
@@ -373,32 +462,68 @@ module Caisse
       # ✅ Nouveau calcul des paiements sans JSON
       total_cb      = ventes.sum(:cb).to_d
       total_amex    = ventes.sum(:amex).to_d
-      total_especes = ventes.sum(:espece).to_d
+      total_especes = ventes.sum do |vente|
+        espece = vente.espece.to_d
+        total_net = vente.total_net.to_d
+        autres_paiements = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+
+        rendu = [espece - (total_net - autres_paiements), 0].max
+        espece - rendu
+      end.round(2)
+
       total_cheque  = ventes.sum(:cheque).to_d
 
       total_encaisse = total_cb + total_amex + total_especes + total_cheque
 
-      ht_0 = ttc_0 = ht_20 = ttc_20 = total_remises = 0
+      # Initialisation
+      ht_0 = ttc_0 = ht_20 = ttc_20 = 0.to_d
+      remises_produits_total = 0.to_d
+      remises_globales_total = 0.to_d
+
       ventes.each do |vente|
+        # Remise globale
+        remise_globale = vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0
+        remises_globales_total += remise_globale
+
+        # Remises par produit et calculs TVA
         vente.ventes_produits.each do |vp|
-          prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : vp.produit.prix
-          remise = vp.remise.to_f
-          montant = prix_unitaire * vp.quantite * (1 - remise / 100.0)
-          total_remises += prix_unitaire * vp.quantite * (remise / 100.0)
+          prix_unitaire = vp.prix_unitaire.to_d > 0 ? vp.prix_unitaire.to_d : vp.produit.prix.to_d
+          quantite = vp.quantite
+          remise_pct = vp.remise.to_d
+          brut = prix_unitaire * quantite
+          remise_euros = (brut * remise_pct / 100).round(2)
+          remises_produits_total += remise_euros
+          net = brut - remise_euros
+
           if vp.produit.etat == "neuf"
-            ttc_20 += montant
+            ttc_20 += net
           else
-            ttc_0 += montant
+            ttc_0 += net
           end
         end
       end
 
-      ht_20  = (ttc_20 / 1.2).round(2)
+      # Répartition de la remise globale sur les produits
+      ttc_total_initial = ttc_0 + ttc_20
+      if ttc_total_initial > 0 && remises_globales_total > 0
+        coef = remises_globales_total / ttc_total_initial
+        ttc_0  -= (ttc_0 * coef).round(2)
+        ttc_20 -= (ttc_20 * coef).round(2)
+      end
+
+      # Calcul HT / TVA
+      ht_20 = (ttc_20 / 1.2).round(2)
       tva_20 = (ttc_20 - ht_20).round(2)
-      ht_0   = ttc_0
+      ht_0 = ttc_0
+
       total_ht  = (ht_0 + ht_20).round(2)
       total_tva = tva_20
-      total_ttc = (ttc_0 + ttc_20).round(2)
+      total_ttc = ventes.sum(&:total_net).round(2)  # 💡 net inclut déjà les remises
+
+      # Remises
+      total_remises = (remises_produits_total + remises_globales_total).round(2)
+
+      # Ticket moyen
       ticket_moyen = total_ventes.positive? ? (total_ttc / total_ventes).round(2) : 0
 
       fond_caisse_initial = 0
@@ -458,30 +583,40 @@ module Caisse
         fond_caisse_initial: fond_caisse_initial,
         fond_caisse_final: fond_caisse_final,
         total_versements: total_versements,
-        details_ventes: ventes.flat_map do |vente|
-          vente.ventes_produits.map do |vp|
-            produit = vp.produit
-            prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : produit.prix
-            remise = vp.remise.to_f
-            montant_total = (prix_unitaire * vp.quantite * (1 - remise / 100)).round(2)
-            {
-              numero_vente: vente.id,
-              heure: vente.date_vente.strftime("%H:%M"),
-              nom: produit.nom.truncate(25),
-              etat: produit.etat.capitalize,
-              paiement: "MULTI",
-              multi: [
-                { "mode" => "CB", "montant" => vente.cb.to_f },
-                { "mode" => "Espèces", "montant" => vente.espece.to_f },
-                { "mode" => "Chèque", "montant" => vente.cheque.to_f },
-                { "mode" => "AMEX", "montant" => vente.amex.to_f }
-              ].reject { |p| p["montant"] <= 0 },
-              quantite: vp.quantite,
-              prix_unitaire: prix_unitaire,
-              remise: remise,
-              montant_total: montant_total
-            }
-          end
+        details_ventes: ventes.map do |vente|
+          total_net = vente.total_net.to_d
+          espece = vente.espece.to_d
+          autres = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+          rendu = [espece - (total_net - autres), 0].max
+
+          {
+            numero_vente: vente.id,
+            heure: vente.date_vente.strftime("%H:%M"),
+            paiement: "MULTI",
+            multi: [
+              { "mode" => "CB", "montant" => vente.cb.to_f },
+              { "mode" => "Espèces", "montant" => espece },
+              { "mode" => "Chèque", "montant" => vente.cheque.to_f },
+              { "mode" => "AMEX", "montant" => vente.amex.to_f }
+            ].reject { |p| p["montant"] <= 0 } + (rendu > 0 ? [{ "mode" => "Rendu", "montant" => rendu }] : []),
+            remise_globale: vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0,
+            produits: vente.ventes_produits.map do |vp|
+              produit = vp.produit
+              prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : produit.prix
+              remise = vp.remise.to_f
+              montant_total = (prix_unitaire * vp.quantite * (1 - remise / 100)).round(2)
+
+              {
+                nom: produit.nom.truncate(25),
+                etat: produit.etat.capitalize,
+                quantite: vp.quantite,
+                prix_unitaire: prix_unitaire,
+                remise: remise,
+                montant_total: montant_total
+              }
+            end,
+            total_vente: vente.total_net
+          }
         end,
         details_annulations: ventes_annulees.map do |vente|
           {
@@ -535,7 +670,6 @@ module Caisse
       redirect_to clotures_path, notice: "✅ Clôture générée sans impression automatique."
     end
 
-
     ##
     # Prévisualisation de la clôture avec tous les détails
     def preview
@@ -554,31 +688,67 @@ module Caisse
 
       total_cb      = ventes.sum(:cb).to_d
       total_amex    = ventes.sum(:amex).to_d
-      total_especes = ventes.sum(:espece).to_d
+      total_especes = ventes.sum do |vente|
+        espece = vente.espece.to_d
+        total_net = vente.total_net.to_d
+        autres_paiements = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+
+        rendu = [espece - (total_net - autres_paiements), 0].max
+        espece - rendu
+      end.round(2)
+
       total_cheque  = ventes.sum(:cheque).to_d
       total_encaisse = total_cb + total_amex + total_especes + total_cheque
 
-      ht_0 = ttc_0 = ht_20 = ttc_20 = total_remises = 0
+      # Initialisation
+      ht_0 = ttc_0 = ht_20 = ttc_20 = 0.to_d
+      remises_produits_total = 0.to_d
+      remises_globales_total = 0.to_d
+
       ventes.each do |vente|
+        # Remise globale
+        remise_globale = vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0
+        remises_globales_total += remise_globale
+
+        # Remises par produit et calculs TVA
         vente.ventes_produits.each do |vp|
-          prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : vp.produit.prix
-          remise = vp.remise.to_f
-          montant = prix_unitaire * vp.quantite * (1 - remise / 100.0)
-          total_remises += prix_unitaire * vp.quantite * (remise / 100.0)
+          prix_unitaire = vp.prix_unitaire.to_d > 0 ? vp.prix_unitaire.to_d : vp.produit.prix.to_d
+          quantite = vp.quantite
+          remise_pct = vp.remise.to_d
+          brut = prix_unitaire * quantite
+          remise_euros = (brut * remise_pct / 100).round(2)
+          remises_produits_total += remise_euros
+          net = brut - remise_euros
+
           if vp.produit.etat == "neuf"
-            ttc_20 += montant
+            ttc_20 += net
           else
-            ttc_0 += montant
+            ttc_0 += net
           end
         end
       end
 
-      ht_20  = (ttc_20 / 1.2).round(2)
+      # Répartition de la remise globale sur les produits
+      ttc_total_initial = ttc_0 + ttc_20
+      if ttc_total_initial > 0 && remises_globales_total > 0
+        coef = remises_globales_total / ttc_total_initial
+        ttc_0  -= (ttc_0 * coef).round(2)
+        ttc_20 -= (ttc_20 * coef).round(2)
+      end
+
+      # Calcul HT / TVA
+      ht_20 = (ttc_20 / 1.2).round(2)
       tva_20 = (ttc_20 - ht_20).round(2)
-      ht_0   = ttc_0
+      ht_0 = ttc_0
+
       total_ht  = (ht_0 + ht_20).round(2)
       total_tva = tva_20
-      total_ttc = (ttc_0 + ttc_20).round(2)
+      total_ttc = ventes.sum(&:total_net).round(2)  # 💡 net inclut déjà les remises
+
+      # Remises
+      total_remises = (remises_produits_total + remises_globales_total).round(2)
+
+      # Ticket moyen
       ticket_moyen = total_ventes.positive? ? (total_ttc / total_ventes).round(2) : 0
 
       fond_caisse_initial = cloture.fond_caisse_initial
@@ -611,30 +781,40 @@ module Caisse
         fond_caisse_initial: fond_caisse_initial,
         fond_caisse_final: fond_caisse_final,
         total_versements: total_versements,
-        details_ventes: ventes.flat_map do |vente|
-          vente.ventes_produits.map do |vp|
-            produit = vp.produit
-            prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : produit.prix
-            remise = vp.remise.to_f
-            montant_total = (prix_unitaire * vp.quantite * (1 - remise / 100)).round(2)
-            {
-              numero_vente: vente.id,
-              heure: vente.date_vente.strftime("%H:%M"),
-              nom: produit.nom.truncate(25),
-              etat: produit.etat.capitalize,
-              paiement: "MULTI",
-              multi: [
-                { "mode" => "CB", "montant" => vente.cb.to_f },
-                { "mode" => "Espèces", "montant" => vente.espece.to_f },
-                { "mode" => "Chèque", "montant" => vente.cheque.to_f },
-                { "mode" => "AMEX", "montant" => vente.amex.to_f }
-              ].reject { |p| p["montant"] <= 0 },
-              quantite: vp.quantite,
-              prix_unitaire: prix_unitaire,
-              remise: remise,
-              montant_total: montant_total
-            }
-          end
+        details_ventes: ventes.map do |vente|
+          total_net = vente.total_net.to_d
+          espece = vente.espece.to_d
+          autres = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+          rendu = [espece - (total_net - autres), 0].max
+
+          {
+            numero_vente: vente.id,
+            heure: vente.date_vente.strftime("%H:%M"),
+            paiement: "MULTI",
+            multi: [
+              { "mode" => "CB", "montant" => vente.cb.to_f },
+              { "mode" => "Espèces", "montant" => espece },
+              { "mode" => "Chèque", "montant" => vente.cheque.to_f },
+              { "mode" => "AMEX", "montant" => vente.amex.to_f }
+            ].reject { |p| p["montant"] <= 0 } + (rendu > 0 ? [{ "mode" => "Rendu", "montant" => rendu }] : []),
+            remise_globale: vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0,
+            produits: vente.ventes_produits.map do |vp|
+              produit = vp.produit
+              prix_unitaire = vp.prix_unitaire.to_f > 0 ? vp.prix_unitaire : produit.prix
+              remise = vp.remise.to_f
+              montant_total = (prix_unitaire * vp.quantite * (1 - remise / 100)).round(2)
+
+              {
+                nom: produit.nom.truncate(25),
+                etat: produit.etat.capitalize,
+                quantite: vp.quantite,
+                prix_unitaire: prix_unitaire,
+                remise: remise,
+                montant_total: montant_total
+              }
+            end,
+            total_vente: vente.total_net
+          }
         end,
         details_annulations: ventes_annulees.map do |vente|
           {
@@ -798,33 +978,28 @@ module Caisse
       lignes << "DETAIL DES VENTES"
       lignes << ""
 
-      ventes_groupes.each do |numero_vente, produits|
-        heure    = produits.first[:heure]
-        paiement = produits.first[:paiement]
-        multi    = produits.first[:multi] || []
-
-        if paiement == "MULTI" && multi.any?
-          lignes << "Vente n°#{numero_vente} - #{heure} - multi-paiement :"
-          multi.each do |m|
-            lignes << "  - #{m['mode']} : #{sprintf('%.2f €', m['montant'])}"
-          end
-        else
-          lignes << "Vente n°#{numero_vente} - #{heure} - payé en #{paiement}"
+      data.details_ventes.each do |vente|
+        lignes << "Vente n°#{vente[:numero_vente]} - #{vente[:heure]} - multi-paiement :"
+        vente[:multi].each do |p|
+          lignes << "  - #{p['mode']} : #{'%.2f €' % p['montant']}"
         end
 
-        produits.each do |ligne|
-          lignes << "  #{ligne[:nom]}"
-          lignes << "    #{ligne[:etat]} - x#{ligne[:quantite]} à #{sprintf('%.2f €', ligne[:prix_unitaire])}"
-          if ligne[:remise].to_f > 0
-            montant_remise = (ligne[:prix_unitaire] * ligne[:quantite] * ligne[:remise] / 100.0).round(2)
-            lignes << "    Remise : -#{sprintf('%.2f €', montant_remise)} (#{sprintf('%.0f', ligne[:remise])} %)"
+        vente[:produits].each do |prod|
+          lignes << "  #{prod[:nom]}"
+          lignes << "    #{prod[:etat]} - x#{prod[:quantite]} à #{'%.2f €' % prod[:prix_unitaire]}"
+          if prod[:remise].to_f > 0
+            remise_euros = (prod[:prix_unitaire] * prod[:quantite] * (prod[:remise].to_f / 100)).round(2)
+            lignes << "    Remise : -#{'%.2f €' % remise_euros} (#{prod[:remise].to_i} %)"
           end
-          lignes << "    Total : #{sprintf('%.2f €', ligne[:montant_total])}"
+          lignes << "    Total : #{'%.2f €' % prod[:montant_total]}"
         end
 
-        total_vente = produits.sum { |l| l[:montant_total].to_f }
-        lignes << "  -> Total vente : #{sprintf('%.2f €', total_vente)}"
-        lignes << "-" * largeur
+        if vente[:remise_globale].to_f > 0
+          lignes << "    Remise globale : -#{'%.2f €' % vente[:remise_globale]}"
+        end
+
+        lignes << "  -> Total vente : #{'%.2f €' % vente[:total_vente]}"
+        lignes << "-" * 42
       end
 
       # 9️⃣ Détail des versements

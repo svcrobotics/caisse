@@ -102,12 +102,22 @@
         <% end %>
 
         <tr class="border-t font-semibold">
-          <td colspan="4" class="px-4 py-2 text-right">Total brut :</td>
+          <td colspan="4" class="px-4 py-2 text-right">Total :</td>
           <td colspan="3" class="px-4 py-2 text-right"><%= number_to_currency(total) %></td>
         </tr>
+
       </tbody>
     </table>
   <% end %>
+
+  <div class="mb-6">
+    <label for="remise_globale_manuel" class="block text-sm font-medium text-gray-700 mb-1">
+      🧾 Remise globale (€)
+    </label>
+    <%= number_field_tag :remise_globale_manuel, params[:remise_globale_manuel], step: 0.01, min: 0,
+            class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
+            oninput: "majResteAPayer()" %>
+  </div>
 
   <!-- 🧾 Résumé avec avoir -->
   <% reste_apres_avoir = total %>
@@ -150,44 +160,83 @@
     </div>
 
     <%= hidden_field_tag :avoir_id, params[:avoir_id] %>
+    <%= hidden_field_tag :remise_globale_manuel, nil, id: "hidden_remise_globale_manuel" %>
 
     <div class="mb-6">
       <label class="block text-lg font-semibold text-gray-800 mb-3">💳 Modes de paiement</label>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <% { "cb" => "💳 CB", "espece" => "💶 Espèces", "cheque" => "🧾 Chèque", "amex" => "🏦 AMEX" }.each do |field, label| %>
-          <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
-            <label for="<%= field %>" class="block text-sm text-gray-600 mb-1"><%= label %></label>
-            <%= number_field_tag field, params[field], step: 0.01, min: 0,
-                  class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
-                  oninput: "majResteAPayer()" %>
-          </div>
-        <% end %>
+
+        <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
+          <label for="cb" class="block text-sm text-gray-600 mb-1">💳 CB</label>
+          <%= number_field_tag :cb, params[:cb], step: 0.01, min: 0, id: "cb",
+                class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
+                oninput: "majResteAPayer()" %>
+        </div>
+
+        <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
+          <label for="espece" class="block text-sm text-gray-600 mb-1">💶 Espèces</label>
+          <%= number_field_tag :espece, params[:espece], step: 0.01, min: 0, id: "espece",
+                class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
+                oninput: "majResteAPayer()" %>
+        </div>
+
+        <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
+          <label for="cheque" class="block text-sm text-gray-600 mb-1">🧾 Chèque</label>
+          <%= number_field_tag :cheque, params[:cheque], step: 0.01, min: 0, id: "cheque",
+                class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
+                oninput: "majResteAPayer()" %>
+        </div>
+
+        <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
+          <label for="amex" class="block text-sm text-gray-600 mb-1">🏦 AMEX</label>
+          <%= number_field_tag :amex, params[:amex], step: 0.01, min: 0, id: "amex",
+                class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
+                oninput: "majResteAPayer()" %>
+        </div>
       </div>
     </div>
 
-    <div class="mt-6 p-4 bg-gray-100 border border-gray-300 rounded-lg text-right">
-      <span class="block text-sm text-gray-600 mb-1">Reste à payer</span>
-      <span id="reste-a-payer" class="text-2xl font-bold text-green-700">
-        <%= number_to_currency([reste_apres_avoir, 0].max) %>
-      </span>
+    <% reste_affiche = [reste_apres_avoir, 0].max %>
+    <% total_paye = params[:cb].to_d + params[:espece].to_d + params[:cheque].to_d + params[:amex].to_d rescue 0.to_d %>
+    <% reste = (reste_apres_avoir || total) - total_paye %>
+
+    <div class="mt-6 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+      <div class="grid grid-cols-2 gap-4 items-center">
+        <div>
+          <span class="block text-sm text-gray-600">💶 Rendre</span>
+          <span id="rendre" class="text-2xl font-bold text-green-700">0,00 €</span>
+        </div>
+        <div class="text-right">
+          <span class="block text-sm text-gray-600">💳 Reste à payer</span>
+          <span id="reste-a-payer" class="text-2xl font-bold text-green-700">
+            <%= number_to_currency(reste) %>
+          </span>
+        </div>
+      </div>
     </div>
 
     <script>
       function majResteAPayer() {
         let total = <%= total || 0 %>;
 
+        const remiseGlobale = parseFloat(document.getElementById("remise_globale_manuel")?.value) || 0;
+        total = Math.max(total - remiseGlobale, 0);
+        const hiddenRemise = document.getElementById("hidden_remise_globale_manuel");
+        if (hiddenRemise) hiddenRemise.value = remiseGlobale;
+
+
         <% if params[:avoir_id].present? && (avoir = Avoir.find_by(id: params[:avoir_id])) %>
           total -= <%= avoir.montant %>;
         <% end %>
 
-        let cb     = parseFloat(document.getElementById("cb")?.value)     || 0;
-        let espece = parseFloat(document.getElementById("espece")?.value) || 0;
-        let cheque = parseFloat(document.getElementById("cheque")?.value) || 0;
-        let amex   = parseFloat(document.getElementById("amex")?.value)   || 0;
+        const cb     = parseFloat(document.getElementById("cb")?.value) || 0;
+        const espece = parseFloat(document.getElementById("espece")?.value) || 0;
+        const cheque = parseFloat(document.getElementById("cheque")?.value) || 0;
+        const amex   = parseFloat(document.getElementById("amex")?.value) || 0;
 
-        let total_paye = cb + espece + cheque + amex;
-        let reste = total - total_paye;
-        if (reste < 0.01) reste = 0;
+        const total_paye = cb + espece + cheque + amex;
+        const reste = Math.max(total - total_paye, 0);
+        const rendu = Math.max(espece - (total - cb - cheque - amex), 0);
 
         const resteElement = document.getElementById("reste-a-payer");
         if (resteElement) {
@@ -196,8 +245,19 @@
             currency: "EUR"
           });
         }
+
+        const renduElement = document.getElementById("rendre");
+        if (renduElement) {
+          renduElement.textContent = rendu.toLocaleString("fr-FR", {
+            style: "currency",
+            currency: "EUR"
+          });
+        }
       }
+
+      document.addEventListener("turbo:load", majResteAPayer);
     </script>
+
 
     <div class="text-right mt-6">
       <button type="submit"

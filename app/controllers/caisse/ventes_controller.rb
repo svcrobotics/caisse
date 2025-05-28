@@ -278,6 +278,20 @@ module Caisse
         end
       end
 
+      # 🔄 Si total manuel est fourni et inférieur au total_net
+      if params[:total_final_manuel].present?
+        total_final_manuel = params[:total_final_manuel].to_d
+
+        if total_final_manuel < total_net
+          remise_globale = (total_net - total_final_manuel).round(2)
+          total_net = total_final_manuel
+        end
+      end
+      if params[:remise_globale_manuel].present?
+        remise_globale = params[:remise_globale_manuel].to_d
+        total_net = [total_net - remise_globale, 0].max
+      end
+
       montants = {
         "CB" => params[:cb].to_d,
         "Espèces" => params[:espece].to_d,
@@ -294,6 +308,7 @@ module Caisse
         date_vente: Time.current,
         total_brut: total_brut.round(2),
         total_net: total_net.round(2),
+        remise_globale: remise_globale,
         cb: params[:cb].to_d,
         espece: params[:espece].to_d,
         cheque: params[:cheque].to_d,
@@ -305,6 +320,24 @@ module Caisse
       if @vente.save
         @vente.ventes_produits.each do |vp|
           vp.produit.decrement!(:stock, vp.quantite)
+        end
+
+        # 💶 Rendu monnaie à enregistrer
+        if @vente.espece.to_f > 0
+          # Total payé par autres moyens
+          autres_paiements = @vente.cb.to_f + @vente.cheque.to_f + @vente.amex.to_f
+          reste_apres_autres = @vente.total_net + montant_avoir.to_f - autres_paiements
+          rendu = @vente.espece.to_f - reste_apres_autres
+
+          if rendu > 0
+            MouvementEspece.create!(
+              sens: "sortie",
+              motif: "Rendu monnaie — Vente n° #{@vente.id}",
+              montant: rendu.round(2),
+              date: @vente.date_vente,
+              compte: nil # ou "caisse" si tu veux le préciser
+            )
+          end
         end
 
         if avoir_utilise
@@ -506,6 +539,14 @@ module Caisse
       lignes << "-" * largeur
 
       total_articles = 0
+      total_net_sans_remise_globale = vente.ventes_produits.sum do |vp|
+        pu = vp.prix_unitaire
+        remise_pct = vp.remise.to_d rescue 0.to_d
+        quantite = vp.quantite
+        montant_brut = pu * quantite
+        remise_euros = (montant_brut * (remise_pct / 100)).round(2)
+        (montant_brut - remise_euros).round(2)
+      end
 
       vente.ventes_produits.includes(:produit).each do |vp|
         produit = vp.produit
@@ -514,7 +555,7 @@ module Caisse
         ligne_info = "#{produit.categorie.capitalize} - #{produit.etat.capitalize} - #{tva_str}"
         lignes << ligne_info
 
-        lignes << produit.nom[0..41] # une ligne max
+        lignes << produit.nom[0..41]
         qte = vp.quantite
         pu = vp.prix_unitaire
         remise_pct = vp.remise.to_d rescue 0.to_d
@@ -523,9 +564,24 @@ module Caisse
         remise_euros = (montant_brut * (remise_pct / 100)).round(2)
         montant_net = (montant_brut - remise_euros).round(2)
 
+        # Répartition proportionnelle de la remise globale
+        remise_globale = vente.remise_globale.to_d
+        part_remise_globale = total_net_sans_remise_globale > 0 ? (montant_net / total_net_sans_remise_globale * remise_globale).round(2) : 0
+        montant_net_final = (montant_net - part_remise_globale).round(2)
+
         lignes << "#{qte.to_s.rjust(10)} x #{format('%.2f €', pu)} => #{format('%.2f €', montant_brut).rjust(10)}"
-        lignes << "- Remise : #{format('%.2f €', remise_euros)} (#{remise_pct.to_i}%)"
-        lignes << "Total net : #{format('%.2f €', montant_net)}"
+        
+        if remise_euros > 0
+          lignes << "- Remise sur le produit : -#{format('%.2f €', remise_euros)} (#{remise_pct.to_i}%)"
+        end
+        
+        if remise_globale > 0
+          lignes << "- Remise globale répartie : -#{format('%.2f €', part_remise_globale)}"
+          lignes << "> Total net : #{format('%.2f €', montant_net_final)}"
+        else
+          lignes << "Total net : #{format('%.2f €', montant_net)}"
+        end
+
         lignes << "-" * largeur
 
         total_articles += qte
@@ -534,29 +590,58 @@ module Caisse
       lignes << "-" * largeur
       lignes << "Total articles : #{total_articles}".rjust(largeur)
 
-      # ✅ Calculs TVA / HT / TTC avec remises en %
-      ttc_20 = vente.ventes_produits.select { |vp| vp.produit.etat == "neuf" }.sum do |vp|
-        brut = vp.quantite * vp.prix_unitaire
-        remise = brut * (vp.remise.to_d / 100)
-        brut - remise
+      # Initialisation des totaux
+      ttc_0 = 0
+      ttc_20 = 0
+
+      # Calcul TTC net par taux après remises produit
+      vente.ventes_produits.includes(:produit).each do |vp|
+        produit = vp.produit
+        qte = vp.quantite
+        pu = vp.prix_unitaire
+        remise_pct = vp.remise.to_d
+        montant_brut = pu * qte
+        remise_euros = (montant_brut * (remise_pct / 100)).round(2)
+        montant_net = montant_brut - remise_euros
+
+        if produit.etat == "neuf"
+          ttc_20 += montant_net
+        else
+          ttc_0 += montant_net
+        end
       end
 
-      ht_20 = (ttc_20 / 1.2).round(2)
-      tva_20 = (ttc_20 - ht_20).round(2)
+      # Application proportionnelle de la remise globale
+      remise_globale = vente.respond_to?(:remise_globale) ? vente.remise_globale.to_d : 0
+      ttc_total = ttc_0 + ttc_20
 
-      ttc_0 = vente.ventes_produits.reject { |vp| vp.produit.etat == "neuf" }.sum do |vp|
-        brut = vp.quantite * vp.prix_unitaire
-        remise = brut * (vp.remise.to_d / 100)
-        brut - remise
+      if remise_globale > 0 && ttc_total > 0
+        part_20 = (ttc_20 / ttc_total).round(4)
+        part_0  = 1 - part_20
+
+        remise_20 = (remise_globale * part_20).round(2)
+        remise_0  = (remise_globale * part_0).round(2)
+
+        ttc_20 -= remise_20
+        ttc_0  -= remise_0
       end
 
-      ht_total = (ht_20 + ttc_0).round(2)
+      # Recalcul des montants HT et TVA
+      ht_20     = (ttc_20 / 1.2).round(2)
+      tva_20    = (ttc_20 - ht_20).round(2)
+      ht_total  = (ht_20 + ttc_0).round(2)
       tva_total = tva_20
-      ttc_total = (ttc_0 + ttc_20).round(2)
+      ttc_total = (ttc_20 + ttc_0).round(2)
+
 
       lignes << "-" * largeur
       lignes << "Sous-total HT".ljust(largeur - montant_col) + "#{'%.2f €' % ht_total}".rjust(montant_col)
       lignes << "TVA (20%)".ljust(largeur - montant_col) + "#{'%.2f €' % tva_total}".rjust(montant_col)
+      if vente.respond_to?(:remise_globale) && vente.remise_globale.to_d > 0
+        lignes << "Remise globale".ljust(largeur - montant_col) + "-#{'%.2f €' % vente.remise_globale}".rjust(montant_col)
+        lignes << "Remise globale répartie selon le montant"
+        lignes << "TTC net de chaque produit de la vente."
+      end
       lignes << "-" * largeur
       lignes << "TOTAL TTC".ljust(largeur - montant_col) + "#{'%.2f €' % ttc_total}".rjust(montant_col)
       lignes << "-" * largeur
@@ -584,12 +669,24 @@ module Caisse
         somme_payee += montant
       end
 
-      # Reste à payer (toujours 0 sauf erreur de caisse)
-      ttc_total = vente.total_net # ou recalcul selon ton besoin
-      reste_a_payer = ttc_total - (somme_payee || 0)
-      reste_a_payer = 0 if reste_a_payer.abs < 0.01
+      # 💶 Calcul du rendu si espèces > à rendre
+      rendu = 0
+      autres_paiements = vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d
+      total_autres = autres_paiements
+      reste_apres_autres = ttc_total - total_autres
+      rendu = vente.espece.to_d - reste_apres_autres
+      rendu = 0 if rendu < 0
+
+      # Reste à payer réel (ne jamais négatif)
+      reste_a_payer = (ttc_total - (vente.cb.to_d + vente.cheque.to_d + vente.amex.to_d + vente.espece.to_d)).round(2)
+      reste_a_payer = 0 if reste_a_payer < 0
+
+      # 🔻 Affichage dans le ticket
+      if rendu > 0
+        lignes << "Rendu".ljust(largeur - montant_col) + "#{'%.2f €' % rendu}".rjust(montant_col)
+      end
+
       lignes << "Reste à payer".ljust(largeur - montant_col) + "#{'%.2f €' % reste_a_payer}".rjust(montant_col)
-      lignes << "-" * largeur
 
       # 5. Si nouvel avoir émis (avoir utilisé > total TTC)
       if montant_avoir > ttc_total
