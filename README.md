@@ -1,4 +1,3 @@
-````markdown
 # Projet Caisse
 
 Ce dépôt contient le module **Caisse** de l’application Boutique. Il gère la gestion des ventes, des mouvements en espèces, des remboursements et des clôtures journalières/mensuelles de caisse.
@@ -84,7 +83,7 @@ Le module **Caisse** gère l’ensemble des opérations liées à la caisse du p
    ```bash
    git clone https://github.com/votre-organisation/caisse.git
    cd caisse
-````
+
 
 2. **Installer les dépendances**
 
