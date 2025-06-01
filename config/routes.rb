@@ -11,6 +11,9 @@ Caisse::Engine.routes.draw do
     member do
       get :imprimer_ticket
       patch :annuler
+      get 'remboursement/:produit_id', to: 'ventes#remboursement', as: 'remboursement_produit'
+      patch :rembourser_produit
+      post :rembourser_produit
     end
   end
 
@@ -24,4 +27,10 @@ Caisse::Engine.routes.draw do
     post :cloture_mensuelle, on: :collection
     get :refresh_fond_caisse, on: :collection 
   end
+
+  
+  resources :remboursements, only: [:index]
+  
+
+
 end

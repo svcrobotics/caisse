@@ -1,0 +1,10 @@
+<h1 class="text-xl font-bold mb-4">Remboursement du produit <%= @produit.nom %> (Vente n°<%= @vente.id %>)</h1>
+
+<%= form_with url: rembourser_produit_vente_path(@vente, produit_id: @produit.id), method: :patch do |f| %>
+  <div class="mb-4">
+    <%= f.label :motif, "Motif du remboursement", class: "block font-medium" %>
+    <%= f.text_area :motif, rows: 3, required: true, class: "w-full border p-2 rounded" %>
+  </div>
+
+  <%= f.submit "Valider le remboursement", class: "bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700" %>
+<% end %>

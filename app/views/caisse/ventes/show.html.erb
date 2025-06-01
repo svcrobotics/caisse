@@ -1,207 +1,150 @@
-<div class="max-w-4xl mx-auto bg-white shadow rounded p-6">
+<div class="max-w-4xl mx-auto bg-white shadow rounded p-6 text-gray-800">
+
+  <!-- Titre principal -->
   <h1 class="text-2xl font-bold mb-4">🧾 Détail de la vente n°<%= @vente.id %></h1>
 
+  <!-- Alertes -->
   <% if @vente.annulee? %>
     <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-      <p class="font-bold">⚠️ Vente annulée</p>
-      <p class="italic text-sm mt-1">Motif : <%= @vente.motif_annulation.presence || "Non précisé" %></p>
+      ⚠️ <strong>Vente annulée</strong><br>
+      <span class="italic text-sm">Motif : <%= @vente.motif_annulation.presence || "Non précisé" %></span>
     </div>
   <% end %>
 
-  <% if @avoir_utilise.present? %>
+  <% if @avoir_utilise %>
     <div class="bg-yellow-100 text-yellow-900 px-4 py-2 rounded mb-2">
-      <span>💳 <strong>Avoir utilisé</strong> : 
-        <%= link_to "N°#{@avoir_utilise.id}", main_app.avoir_path(@avoir_utilise) %> — 
-        <%= number_to_currency(@avoir_utilise.montant) %>
-      </span>
-      <% if @reste < 0 %>
-        <span class="block text-xs text-gray-700 mt-1">
-          Le total était couvert par l’avoir.
-        </span>
+      💳 <strong>Avoir utilisé</strong> : 
+      <%= link_to "N°#{@avoir_utilise.id}", main_app.avoir_path(@avoir_utilise) %> — 
+      <%= number_to_currency(@avoir_utilise.montant) %>
+      <% if @reste <= 0 %>
+        <span class="block text-xs mt-1">Le total était couvert par l’avoir.</span>
       <% end %>
     </div>
   <% end %>
 
-  <% if @avoir_emis.present? %>
+  <% if @avoir_emis %>
     <div class="bg-green-100 text-green-900 px-4 py-2 rounded mb-2">
-      <span>🟢 <strong>Nouvel avoir émis</strong> : 
-        <%= link_to "N°#{@avoir_emis.id}", main_app.avoir_path(@avoir_emis) %> — 
-        <%= number_to_currency(@avoir_emis.montant) %>
-      </span>
-      <span class="block text-xs text-gray-700 mt-1">
-        Cet avoir pourra être utilisé sur une prochaine vente.
-      </span>
+      🟢 <strong>Nouvel avoir émis</strong> : 
+      <%= link_to "N°#{@avoir_emis.id}", main_app.avoir_path(@avoir_emis) %> — 
+      <%= number_to_currency(@avoir_emis.montant) %>
+      <span class="block text-xs mt-1">Cet avoir pourra être utilisé sur une prochaine vente.</span>
     </div>
   <% end %>
 
-  <div class="mb-4 text-gray-700">
-    <p><strong>ID Vente :</strong> <%= @vente.id %></p>
+  <!-- Infos générales -->
+  <div class="mb-6 space-y-1">
     <p><strong>Date :</strong> <%= l(@vente.date_vente || @vente.created_at, format: :long) %></p>
     <p><strong>Cliente :</strong> <%= @vente.client&.nom || "Sans cliente" %></p>
-    <p><strong>Mode de paiement :</strong>
-      <%= [
-        ("CB: #{number_to_currency(@vente.cb)}" if @vente.cb.to_f > 0),
-        ("Espèces: #{number_to_currency(@vente.espece)}" if @vente.espece.to_f > 0),
-        ("Chèque: #{number_to_currency(@vente.cheque)}" if @vente.cheque.to_f > 0),
-        ("AMEX: #{number_to_currency(@vente.amex)}" if @vente.amex.to_f > 0)
-      ].compact.join(" · ").html_safe.presence || "Non précisé" %>
-    </p>
+    
     <p><strong>Total brut :</strong> <%= number_to_currency(@vente.total_brut) %></p>
-    <p><strong>Total net (après remises) :</strong> <%= number_to_currency(@vente.total_net) %></p>
-      <% if @avoir_utilise.present? %>
-        <p>
-          <strong>Montant d’avoir utilisé :</strong>
-          <%= number_to_currency(@avoir_utilise.montant) %>
-        </p>
-        <p>
-          <strong>
-            <% if @reste <= 0 %>
-              Vente entièrement réglée par avoir.
-              <% if @avoir_emis.present? %>
-                Un avoir de <%= number_to_currency(@avoir_emis.montant) %> a été émis pour la différence.
-              <% end %>
-            <% else %>
-              Reste à payer après avoir :
-              <%= number_to_currency(@reste) %>
-            <% end %>
-          </strong>
-        </p>
-      <% else %>
-        <p>
-          <strong>Total payé :</strong> <%= number_to_currency(@vente.total_net) %>
-        </p>
-        <% if @vente.remise_globale.to_f > 0 %>
-          <p><strong>Remise globale :</strong> -<%= number_to_currency(@vente.remise_globale) %></p>
-        <% end %>
+
+    <% total_remises_produits = @vente.ventes_produits.sum do |vp| 
+       total_ligne = vp.prix_unitaire * vp.quantite
+       (total_ligne * (vp.remise.to_d / 100)).round(2)
+    end %>
+
+    <p><strong>Remises produits :</strong> -<%= number_to_currency(total_remises_produits) %></p>
+
+    <% if @vente.remise_globale.to_f > 0 %>
+      <p><strong>Remise globale :</strong> -<%= number_to_currency(@vente.remise_globale) %></p>
+    <% end %>
+    <% if @avoir_utilise %>
+      <p><strong>Montant d’avoir utilisé :</strong> <%= number_to_currency(@avoir_utilise.montant) %></p>
+      <% if @reste > 0 %>
+        <p><strong>Reste à payer après avoir :</strong> <%= number_to_currency(@reste) %></p>
+      <% elsif @avoir_emis %>
+        <p><strong>Vente entièrement réglée</strong>. Un avoir de <%= number_to_currency(@avoir_emis.montant) %> a été émis pour la différence.</p>
       <% end %>
+    <% else %>
+      <% total_remises = total_remises_produits + @vente.remise_globale %>
+      <p><strong>Total remises :</strong> -<%= number_to_currency(total_remises) %></p>
+      <p><strong>Total net (après remises) :</strong> <%= number_to_currency(@vente.total_net) %></p>
+      <p><strong>Total payé :</strong> <%= number_to_currency(@vente.total_net) %></p>
+    <% end %>
+    <p><strong>Mode de paiement :</strong> 
+      <%= [
+            ("CB: #{number_to_currency(@vente.cb)}" if @vente.cb.to_f > 0),
+            ("Espèces: #{number_to_currency(@vente.espece)}" if @vente.espece.to_f > 0),
+            ("Chèque: #{number_to_currency(@vente.cheque)}" if @vente.cheque.to_f > 0),
+            ("AMEX: #{number_to_currency(@vente.amex)}" if @vente.amex.to_f > 0)
+          ].compact.join(" · ").html_safe.presence || "Non précisé" %>
+    </p>
   </div>
 
-  <h2 class="text-xl font-semibold mt-6 mb-2">🛍 Détail des produits vendus</h2>
+  <% total_net_avant_remise_globale = @vente.ventes_produits.sum do |vp|
+     total_brut = vp.prix_unitaire * vp.quantite
+     remise_euros = (total_brut * (vp.remise.to_d / 100)).round(2)
+     (total_brut - remise_euros).round(2)
+  end %>
+
+  <h2 class="text-xl font-semibold mt-6 mb-3">🛍 Produits vendus</h2>
   <table class="w-full text-sm border-collapse rounded shadow">
     <thead class="bg-gray-100 text-gray-700 border-b">
       <tr>
         <th class="px-3 py-2 text-left">Produit</th>
-        <th class="px-3 py-2 text-left">Code-barres</th>
+        <th class="px-3 py-2 text-left">Code-barre</th>
         <th class="px-3 py-2 text-right">Qté</th>
         <th class="px-3 py-2 text-right">Prix unitaire</th>
         <th class="px-3 py-2 text-right">Remise</th>
         <th class="px-3 py-2 text-right">Total net</th>
         <th class="px-3 py-2 text-left">Déposant</th>
-        <th class="px-3 py-2 text-right">Prix déposant</th>
+        <th class="px-3 py-2 text-right">Action</th>
       </tr>
     </thead>
     <tbody>
       <% @vente.ventes_produits.includes(:produit).each do |vp| %>
         <% produit = vp.produit %>
         <% total_brut = vp.prix_unitaire * vp.quantite %>
-        <% remise_pct = vp.remise.to_d %>
-        <% remise_euros = (total_brut * (remise_pct / 100)).round(2) %>
+        <% remise_euros = (total_brut * (vp.remise.to_d / 100)).round(2) %>
         <% total_net = (total_brut - remise_euros).round(2) %>
+
+        <% prorata_remise_globale = if @vente.remise_globale.to_f > 0 && total_net_avant_remise_globale > 0
+          (@vente.remise_globale.to_f * total_net / total_net_avant_remise_globale).round(2)
+        else
+          0
+        end %>
+
+        <% total_net_final = (total_net - prorata_remise_globale).round(2) %>
+
         <tr class="border-b hover:bg-yellow-50">
-          <td class="px-3 py-2 font-semibold text-gray-800">
-            <%= produit.nom %>
-            <span class="block text-xs text-gray-400">#<%= produit.id %></span>
+          <td class="px-3 py-2 font-semibold">
+            <%= produit.nom %><br>
+            <span class="text-xs text-gray-400">#<%= produit.id %></span>
           </td>
           <td class="px-3 py-2"><%= produit.code_barre %></td>
           <td class="px-3 py-2 text-right"><%= vp.quantite %></td>
-          <td class="px-3 py-2 text-right whitespace-nowrap">
-            <% if produit.en_promo? && produit.prix_promo.present? && produit.prix_promo.to_d != produit.prix.to_d %>
-              <span class="relative inline-block text-gray-500 text-sm font-medium">
-                <span class="inline-block"><%= number_to_currency(produit.prix) %></span>
-                <span style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background-color: red; transform: rotate(-15deg); transform-origin: left center;"></span>
-              </span>
-              <span class="ml-2 text-red-600 font-bold text-sm">
-                <%= number_to_currency(vp.prix_unitaire) %>
-              </span>
-            <% else %>
-              <%= number_to_currency(vp.prix_unitaire) %>
-            <% end %>
-          </td>
+          <td class="px-3 py-2 text-right"><%= number_to_currency(vp.prix_unitaire) %></td>
           <td class="px-3 py-2 text-right">
             <% if remise_euros > 0 %>
-              <span class="text-orange-700">-<%= number_to_currency(remise_euros) %> (<%= remise_pct.to_i %>%)</span>
-            <% else %>
+              <div class="text-orange-700">-<%= number_to_currency(remise_euros) %> (<%= vp.remise.to_i %>%)</div>
+            <% end %>
+            <% if prorata_remise_globale > 0 %>
+              <div class="text-blue-700 text-xs italic">-<%= number_to_currency(prorata_remise_globale) %> (prorata globale)</div>
+            <% end %>
+            <% if remise_euros == 0 && prorata_remise_globale == 0 %>
               <span class="text-gray-400">—</span>
             <% end %>
           </td>
-          <td class="px-3 py-2 text-right font-bold">
-            <%= number_to_currency(total_net) %>
-          </td>
+          <td class="px-3 py-2 text-right font-bold"><%= number_to_currency(total_net_final) %></td>
           <td class="px-3 py-2">
-            <% if produit.client.present? %>
-              <%= link_to "#{produit.client.prenom} #{produit.client.nom}", main_app.client_path(produit.client), class: "text-blue-600 hover:underline" %>
+            <% if produit.client %>
+              <%= link_to produit.client.nom, main_app.client_path(produit.client), class: "text-blue-600 hover:underline" %>
             <% else %>
               <span class="text-gray-400">—</span>
             <% end %>
           </td>
           <td class="px-3 py-2 text-right">
-            <% if produit.prix_deposant.present? %>
-              <%= number_to_currency(produit.prix_deposant) %>
-            <% else %>
-              <span class="text-gray-400">—</span>
+            <% if produit.etat == "neuf" %>
+              <%= button_to "💸 Remboursement", rembourser_produit_vente_path(@vente, produit_id: produit.id), method: :post, params: { quantite: 1 }, data: { turbo_confirm: "Rembourser 1 exemplaire ?" }, class: "text-red-600 text-sm" %>
             <% end %>
           </td>
         </tr>
       <% end %>
     </tbody>
-    <tfoot>
-      <tr class="bg-gray-100 border-t">
-        <td colspan="5" class="text-right font-semibold px-3 py-2">Total net produits :</td>
-        <td class="text-right font-bold px-3 py-2">
-          <%= number_to_currency(@vente.total_net) %>
-        </td>
-        <td colspan="2"></td>
-      </tr>
-      <% if @avoir_utilise.present? %>
-        <tr class="bg-yellow-50">
-          <td colspan="5" class="text-right font-semibold px-3 py-2 text-yellow-900">Avoir utilisé :</td>
-          <td class="text-right px-3 py-2 text-yellow-900">
-            -<%= number_to_currency(@avoir_utilise.montant) %>
-          </td>
-          <td colspan="2"></td>
-        </tr>
-        <% if @reste <= 0 %>
-          <tr class="bg-green-50">
-            <td colspan="5" class="text-right font-semibold px-3 py-2 text-green-900">
-              Total réglé par avoir
-              <% if @avoir_emis.present? %>
-                &nbsp;/ Nouvel avoir émis
-              <% end %>
-              :
-            </td>
-            <td class="text-right font-bold px-3 py-2 text-green-900">
-              0,00&nbsp;€
-              <% if @avoir_emis.present? %>
-                <br>
-                <span class="text-xs text-green-900">
-                  +<%= number_to_currency(@avoir_emis.montant) %>
-                </span>
-              <% end %>
-            </td>
-            <td colspan="2"></td>
-          </tr>
-        <% else %>
-          <tr class="bg-blue-50">
-            <td colspan="5" class="text-right font-semibold px-3 py-2 text-blue-900">Reste à payer :</td>
-            <td class="text-right font-bold px-3 py-2 text-blue-900">
-              <%= number_to_currency(@reste) %>
-            </td>
-            <td colspan="2"></td>
-          </tr>
-        <% end %>
-      <% else %>
-        <tr class="bg-blue-50">
-          <td colspan="5" class="text-right font-semibold px-3 py-2 text-blue-900">Total payé :</td>
-          <td class="text-right font-bold px-3 py-2 text-blue-900">
-            <%= number_to_currency(@vente.total_net) %>
-          </td>
-          <td colspan="2"></td>
-        </tr>
-      <% end %>
-    </tfoot>
   </table>
 
 
+  <!-- Bouton retour -->
   <div class="mt-6">
     <%= link_to "← Retour à la liste", ventes_path, class: "text-blue-600 hover:underline" %>
   </div>

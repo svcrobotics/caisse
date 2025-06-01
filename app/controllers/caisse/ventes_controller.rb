@@ -99,59 +99,80 @@ module Caisse
 
     def annuler
       @vente = Caisse::Vente.find(params[:id])
-      @vente.annulee = true
-      @vente.motif_annulation = params[:motif_annulation]
-      @vente.save!
 
-      # Remet tous les produits en stock
+      # Si la vente est déjà annulée, on stoppe tout
+      if @vente.annulee?
+        redirect_to ventes_path, alert: "❌ La vente n°#{@vente.id} est déjà annulée." and return
+      end
+
+      # 1) On marque la vente comme annulée et on stocke le motif
+      @vente.update!(annulee: true, motif_annulation: params[:motif_annulation])
+
+      # 2) On remet les produits en stock
       @vente.ventes_produits.each do |vp|
         vp.produit.increment!(:stock, vp.quantite)
       end
 
-      remboursement = params[:remboursement]
+      # 3) Création d’un enregistrement Remboursement (modèle que l’on vient de générer)
+      montant_total_rembourse = @vente.total_net.round(2)
+      mode_remboursement      = if @vente.espece.to_f > 0 && params[:remboursement] == "especes"
+                                  "espèces"
+                                elsif @vente.cb.to_f > 0 && params[:remboursement] == "especes"
+                                  "CB en espèces"
+                                elsif params[:remboursement] == "avoir"
+                                  "avoir"
+                                else
+                                  "aucun"
+                                end
 
-      if @vente.espece.to_f > 0 || remboursement == "especes"
+      motif_remb = "Annulation vente n°#{@vente.id} — #{params[:motif_annulation]}"
+      Remboursement.create!(
+        vente:   @vente,
+        montant: montant_total_rembourse,
+        date:    Date.today,
+        mode:    mode_remboursement,
+        motif:   motif_remb
+      )
+
+      # 4) Créer le MouvementEspece si besoin (pour la partie “sortie” espèces)
+      if @vente.espece.to_f > 0 && params[:remboursement] == "especes"
         MouvementEspece.create!(
-          date: Date.today,
-          sens: "sortie",
-          montant: @vente.total_net,
-          motif: "Remboursement vente annulée n°#{@vente.id} — #{params[:motif_annulation]}"
+          date:    Date.today,
+          sens:    "sortie",
+          montant: @vente.espece.round(2),
+          motif:   "Remboursement vente annulée n°#{@vente.id} — #{params[:motif_annulation]}",
+          compte:  nil,
+          vente:   @vente
         )
       end
 
+      # 5) Si on rembourse la CB en espèces (cas particulier)
       if @vente.cb.to_f > 0 && params[:remboursement] == "especes"
         MouvementEspece.create!(
-          date: Date.today,
-          sens: "sortie",
-          montant: @vente.total_net,
-          motif: "Remboursement CB en espèces — vente n°#{@vente.id} — #{params[:motif_annulation]}"
+          date:    Date.today,
+          sens:    "sortie",
+          montant: @vente.cb.round(2),
+          motif:   "Remboursement CB en espèces — vente n°#{@vente.id} — #{params[:motif_annulation]}",
+          compte:  nil,
+          vente:   @vente
         )
       end
 
-      if params[:remboursement] == "aucun" && @vente.client.present?
+      # 6) Si on rembourse en avoir (création de l’avoir client)
+      if params[:remboursement] == "avoir" && @vente.client.present?
         Avoir.create!(
-          client: @vente.client,
-          vente: @vente,
-          montant: @vente.total_net,
-          utilise: false,
-          date: Date.today,
+          client:    @vente.client,
+          vente:     @vente,
+          montant:   montant_total_rembourse,
+          utilise:   false,
+          date:      Date.today,
           remarques: "Annulation de la vente n°#{@vente.id}"
         )
       end
 
-      if params[:remboursement] == "avoir"
-        Avoir.create!(
-          client: @vente.client,
-          vente: @vente,
-          montant: @vente.total_net,
-          utilise: false,
-          date: Date.today,
-          remarques: "Annulation de la vente n°#{@vente.id}"
-        )
-      end
-
-      redirect_to ventes_path, notice: "✅ Vente annulée avec succès. Les produits ont été remis en stock."
+      redirect_to ventes_path, notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
     end
+
 
     def recherche_produit
       code = correct_scanner_input(params[:code_barre])
@@ -231,136 +252,155 @@ module Caisse
         return
       end
 
-      client = params[:sans_client] == "1" ? nil : Client.find_by(nom: params[:client_nom])
+      # 1) Initialisation
+      remise_globale  = 0.to_d
+      client          = params[:sans_client] == "1" ? nil : Client.find_by(nom: params[:client_nom])
 
-      total_brut = 0
-      total_net  = 0
+      total_brut      = 0.to_d
+      total_net       = 0.to_d
       ventes_produits = []
 
       ventes_data.each do |produit_id_str, infos|
-        produit = Produit.find(produit_id_str)
-        quantite = infos["quantite"].to_i
-        prix_unitaire = infos["prix"].to_d
-        remise_pct = infos["remise"].to_d
+        produit        = Produit.find(produit_id_str)
+        quantite       = infos["quantite"].to_i
+        prix_unitaire  = infos["prix"].to_d
+        remise_pct     = infos["remise"].to_d
 
+        # Calcul brut et net pour chaque ligne
         total_ligne_brut = prix_unitaire * quantite
-        remise_euros = (total_ligne_brut * (remise_pct / 100)).round(2)
-        total_ligne_net = total_ligne_brut - remise_euros
+        remise_euros     = (total_ligne_brut * (remise_pct / 100)).round(2)
+        total_ligne_net  = total_ligne_brut - remise_euros
 
         ventes_produits << {
-          produit: produit,
-          quantite: quantite,
+          produit:       produit,
+          quantite:      quantite,
           prix_unitaire: prix_unitaire,
-          remise: remise_pct
+          remise:        remise_pct
         }
 
         total_brut += total_ligne_brut
         total_net  += total_ligne_net
       end
 
-      # 🔄 Gestion de l’avoir
-      reste_credit = nil
-      avoir_utilise = nil
-      montant_avoir = 0
+      # 2) Gestion de l’avoir
+      reste_credit   = nil
+      avoir_utilise  = nil
+      montant_avoir  = 0.to_d
 
       if params[:avoir_id].present?
         avoir_utilise = Avoir.find_by(id: params[:avoir_id], utilise: false)
         if avoir_utilise && (avoir_utilise.created_at >= 1.year.ago)
-          montant_avoir = avoir_utilise.montant
-          reste_a_payer = total_net - montant_avoir
+          montant_avoir  = avoir_utilise.montant
+          reste_a_payer  = total_net - montant_avoir
           if reste_a_payer <= 0
             reste_credit = (montant_avoir - total_net).round(2)
-            total_net = 0
-            flash[:notice] ||= "✅ Vente à 0€ enregistrée via avoir."
+            total_net    = 0.to_d
+            flash[:notice] ||= "✅ Vente à 0€ enregistrée via l’avoir."
           else
             total_net = reste_a_payer.round(2)
           end
         end
       end
 
-      # 🔄 Si total manuel est fourni et inférieur au total_net
+      # 3) Si total manuel est fourni et inférieur au total_net
       if params[:total_final_manuel].present?
         total_final_manuel = params[:total_final_manuel].to_d
-
         if total_final_manuel < total_net
           remise_globale = (total_net - total_final_manuel).round(2)
-          total_net = total_final_manuel
+          total_net      = total_final_manuel
         end
       end
+
+      # 4) Remise globale manuelle (si fournie)
       if params[:remise_globale_manuel].present?
         remise_globale = params[:remise_globale_manuel].to_d
-        total_net = [total_net - remise_globale, 0].max
+        total_net      = [total_net - remise_globale, 0].max
       end
 
       montants = {
-        "CB" => params[:cb].to_d,
+        "CB"      => params[:cb].to_d,
         "Espèces" => params[:espece].to_d,
-        "Chèque" => params[:cheque].to_d,
-        "AMEX" => params[:amex].to_d
+        "Chèque"  => params[:cheque].to_d,
+        "AMEX"    => params[:amex].to_d
       }
 
       # Ajout du montant de l’avoir utilisé (si présent)
-      montant_avoir ||= 0
+      montant_avoir ||= 0.to_d
 
-      # 💾 Création de la vente
+      # 5) Création de la vente en base
       @vente = Caisse::Vente.new(
-        client: client,
-        date_vente: Time.current,
-        total_brut: total_brut.round(2),
-        total_net: total_net.round(2),
+        client:         client,
+        date_vente:     Time.current,
+        total_brut:     total_brut.round(2),
+        total_net:      total_net.round(2),
         remise_globale: remise_globale,
-        cb: params[:cb].to_d,
-        espece: params[:espece].to_d,
-        cheque: params[:cheque].to_d,
-        amex: params[:amex].to_d
+        cb:             params[:cb].to_d,
+        espece:         params[:espece].to_d,
+        cheque:         params[:cheque].to_d,
+        amex:           params[:amex].to_d
       )
 
       ventes_produits.each { |vp| @vente.ventes_produits.build(vp) }
 
       if @vente.save
+        # 6) Mise à jour du stock
         @vente.ventes_produits.each do |vp|
           vp.produit.decrement!(:stock, vp.quantite)
         end
 
-        # 💶 Rendu monnaie à enregistrer
+        # 7) Enregistrement du mouvement “entrée” (espèces encaissées) **avant** tout rendu
         if @vente.espece.to_f > 0
-          # Total payé par autres moyens
-          autres_paiements = @vente.cb.to_f + @vente.cheque.to_f + @vente.amex.to_f
-          reste_apres_autres = @vente.total_net + montant_avoir.to_f - autres_paiements
-          rendu = @vente.espece.to_f - reste_apres_autres
+          MouvementEspece.create!(
+            sens:    "entrée",
+            motif:   "Paiement client - Vente n°#{@vente.id}",
+            montant: @vente.espece.round(2),
+            date:    @vente.date_vente,
+            compte:  nil
+          )
+        end
 
-          if rendu > 0
+        # 8) Enregistrement du rendu de monnaie (mouvement “sortie”), si nécessaire
+        if @vente.espece.to_f > 0
+          autres_paiements   = @vente.cb.to_f + @vente.cheque.to_f + @vente.amex.to_f
+          reste_apres_autres = @vente.total_net + montant_avoir.to_f - autres_paiements
+          rendu              = @vente.espece.to_f - reste_apres_autres
+
+          if rendu.positive?
             MouvementEspece.create!(
-              sens: "sortie",
-              motif: "Rendu monnaie — Vente n° #{@vente.id}",
+              sens:    "sortie",
+              motif:   "Rendu monnaie - Vente n°#{@vente.id}",
               montant: rendu.round(2),
-              date: @vente.date_vente,
-              compte: nil # ou "caisse" si tu veux le préciser
+              date:    @vente.date_vente,
+              compte:  nil
             )
           end
         end
 
+        # 9) Marquer l’avoir comme utilisé
         if avoir_utilise
           avoir_utilise.update!(utilise: true, vente: @vente)
         end
 
+        # 10) Créer un nouvel avoir si reste de crédit
         if reste_credit && reste_credit > 0
           Avoir.create!(
-            client: avoir_utilise.client,
-            vente: @vente,
-            montant: reste_credit,
-            utilise: false,
-            date: Date.today,
+            client:    avoir_utilise.client,
+            vente:     @vente,
+            montant:   reste_credit,
+            utilise:   false,
+            date:      Date.today,
             remarques: "Solde restant de l’avoir n°#{avoir_utilise.id}"
           )
         end
 
+        # 11) Réinitialisation de la session et redirection
         session[:ventes] = {}
         redirect_to ventes_path, notice: "✅ Vente enregistrée avec succès."
       else
         redirect_to new_vente_path, alert: "❌ Erreur lors de l'enregistrement de la vente."
       end
     end
+
 
     def verifier_avoir
       @avoir = Avoir.find_by(id: params[:avoir_id])
@@ -488,6 +528,69 @@ module Caisse
       nom_fichier = "ventes_#{mois}.xlsx"
       send_data p.to_stream.read, filename: nom_fichier, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     end
+
+    def remboursement
+      @vente = Caisse::Vente.find(params[:id])
+      @produit = Produit.find(params[:produit_id])
+
+      unless @produit.etat == "neuf"
+        redirect_to vente_path(@vente), alert: "Seuls les produits neufs peuvent être remboursés."
+        return
+      end
+    end
+
+    def rembourser_produit
+      @vente = Caisse::Vente.find(params[:id])
+      @produit = Produit.find(params[:produit_id])
+      quantite_remb = params[:quantite].to_i
+      motif = params[:motif] || "Sans motif"
+
+      vp = @vente.ventes_produits.find_by(produit_id: @produit.id)
+
+      unless vp && @produit.etat == "neuf" && quantite_remb.between?(1, vp.quantite)
+        redirect_to vente_path(@vente), alert: "Produit invalide, non remboursable ou quantité incorrecte."
+        return
+      end
+
+      Caisse::Vente.transaction do
+        # Re-crédit du stock
+        @produit.update!(stock: @produit.stock + quantite_remb)
+
+        # Prix unitaire
+        prix_unitaire = vp.prix_unitaire.to_d > 0 ? vp.prix_unitaire.to_d : @produit.prix.to_d
+        total_brut = prix_unitaire * quantite_remb
+
+        # Remise produit
+        remise_produit = (total_brut * vp.remise.to_d / 100).round(2)
+        net_apres_remise = total_brut - remise_produit
+
+        # Base pour la remise globale
+        total_net_produits = @vente.ventes_produits.sum do |vpr|
+          pu = vpr.prix_unitaire.to_d > 0 ? vpr.prix_unitaire.to_d : vpr.produit.prix.to_d
+          (pu * vpr.quantite * (1 - vpr.remise.to_d / 100))
+        end
+
+        # Part de remise globale pour ce produit
+        part_remise_globale = if total_net_produits > 0 && @vente.remise_globale.to_d > 0
+          (net_apres_remise / total_net_produits) * @vente.remise_globale.to_d
+        else
+          0
+        end
+
+        montant = (net_apres_remise - part_remise_globale).round(2)
+
+        avoir = Avoir.create!(
+          client: @vente.client,
+          montant: montant,
+          date: Date.today,
+          motif: "Remboursement #{quantite_remb}x produit ##{@produit.id} : #{motif}",
+          vente: @vente
+        )
+
+        redirect_to vente_path(@vente), notice: "Avoir émis (#{quantite_remb}x) : N°#{avoir.id} — #{montant} €"
+      end
+    end
+
 
 
     private

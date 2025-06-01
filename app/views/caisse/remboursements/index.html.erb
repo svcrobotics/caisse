@@ -1,0 +1,65 @@
+<h1 class="text-2xl font-bold mb-4">Remboursements du <%= l(@aujourd_hui, format: :long) %></h1>
+
+<% if @remboursements.any? %>
+  <h2 class="text-xl font-semibold mt-6 mb-2">Liste des remboursements (avoirs / CB)</h2>
+  <table class="min-w-full bg-white mb-8">
+    <thead>
+      <tr>
+        <th class="px-4 py-2 border">Heure</th>
+        <th class="px-4 py-2 border">Vente n°</th>
+        <th class="px-4 py-2 border">Client</th>
+        <th class="px-4 py-2 border">Montant remboursé</th>
+        <th class="px-4 py-2 border">Mode de remboursement</th>
+        <th class="px-4 py-2 border">Motif</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @remboursements.each do |r| %>
+        <tr class="odd:bg-gray-50">
+          <td class="px-4 py-2 border"><%= r.created_at.strftime("%H:%M") %></td>
+          <td class="px-4 py-2 border"><%= r.vente_id %></td>
+          <td class="px-4 py-2 border">
+            <% if r.vente.client.present? %>
+              <%= r.vente.client.nom %>
+            <% else %>
+              Sans client
+            <% end %>
+          </td>
+          <td class="px-4 py-2 border"><%= number_to_currency(r.montant) %></td>
+          <td class="px-4 py-2 border"><%= r.mode.capitalize %></td>
+          <td class="px-4 py-2 border"><%= r.motif %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% else %>
+  <p>Aucun remboursement (avoir ou CB) enregistré pour aujourd'hui.</p>
+<% end %>
+
+<hr class="my-6" />
+
+<% if @mouvements_especes.any? %>
+  <h2 class="text-xl font-semibold mt-6 mb-2">Mouvements espèces (sortie) liés aux remboursements</h2>
+  <table class="min-w-full bg-white">
+    <thead>
+      <tr>
+        <th class="px-4 py-2 border">Heure</th>
+        <th class="px-4 py-2 bord**er**">Motif</th>
+        <th class="px-4 py-2 border">Compte</th>
+        <th class="px-4 py-2 border">Montant</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @mouvements_especes.each do |m| %>
+        <tr class="odd:bg-gray-50">
+          <td class="px-4 py-2 border"><%= m.created_at.strftime("%H:%M") %></td>
+          <td class="px-4 py-2 border"><%= m.motif %></td>
+          <td class="px-4 py-2 border"><%= m.compte.presence || "-" %></td>
+          <td class="px-4 py-2 border"><%= number_to_currency(m.montant) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% else %>
+  <p>Aucun mouvement d’espèces (sortie) enregistré pour aujourd’hui.</p>
+<% end %>
