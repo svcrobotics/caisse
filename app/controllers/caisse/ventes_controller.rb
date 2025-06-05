@@ -100,53 +100,52 @@ module Caisse
     def annuler
       @vente = Caisse::Vente.find(params[:id])
 
-      # Si la vente est déjà annulée, on stoppe tout
+      # 1) Si la vente est déjà annulée, on stoppe tout
       if @vente.annulee?
         redirect_to ventes_path, alert: "❌ La vente n°#{@vente.id} est déjà annulée." and return
       end
 
-      # 1) On marque la vente comme annulée et on stocke le motif
+      # 2) Marquer la vente comme annulée
       @vente.update!(annulee: true, motif_annulation: params[:motif_annulation])
 
-      # 2) On remet les produits en stock
+      # 3) Remettre les produits en stock
       @vente.ventes_produits.each do |vp|
         vp.produit.increment!(:stock, vp.quantite)
       end
 
-      # 3) Création d’un enregistrement Remboursement (modèle que l’on vient de générer)
-      montant_total_rembourse = @vente.total_net.round(2)
-      mode_remboursement      = if @vente.espece.to_f > 0 && params[:remboursement] == "especes"
-                                  "espèces"
-                                elsif @vente.cb.to_f > 0 && params[:remboursement] == "especes"
-                                  "CB en espèces"
-                                elsif params[:remboursement] == "avoir"
-                                  "avoir"
-                                else
-                                  "aucun"
-                                end
+      # 4) Déterminer le mode de remboursement
+      mode_remboursement = case params[:remboursement]
+                           when "especes" then "espèces"
+                           when "cb"      then "cb"
+                           when "avoir"   then "avoir"
+                           else                "aucun"
+                           end
 
+      montant_total_rembourse = @vente.total_net.round(2)
       motif_remb = "Annulation vente n°#{@vente.id} — #{params[:motif_annulation]}"
+
+      # 5) Enregistrer le remboursement
       Remboursement.create!(
-        vente:   @vente,
-        montant: montant_total_rembourse,
-        date:    Date.today,
-        mode:    mode_remboursement,
-        motif:   motif_remb
+        vente:         @vente,
+        montant:       montant_total_rembourse,
+        date:          Date.today,
+        mode: mode_remboursement,
+        motif:         motif_remb
       )
 
-      # 4) Créer le MouvementEspece si besoin (pour la partie “sortie” espèces)
+      # 6) Remboursement en espèces (si paiement en espèces)
       if @vente.espece.to_f > 0 && params[:remboursement] == "especes"
         MouvementEspece.create!(
           date:    Date.today,
           sens:    "sortie",
           montant: @vente.espece.round(2),
-          motif:   "Remboursement vente annulée n°#{@vente.id} — #{params[:motif_annulation]}",
+          motif:   "Remboursement espèces — vente n°#{@vente.id} — #{params[:motif_annulation]}",
           compte:  nil,
           vente:   @vente
         )
       end
 
-      # 5) Si on rembourse la CB en espèces (cas particulier)
+      # 7) Remboursement CB en espèces (cas particulier)
       if @vente.cb.to_f > 0 && params[:remboursement] == "especes"
         MouvementEspece.create!(
           date:    Date.today,
@@ -158,7 +157,7 @@ module Caisse
         )
       end
 
-      # 6) Si on rembourse en avoir (création de l’avoir client)
+      # 8) Remboursement par avoir
       if params[:remboursement] == "avoir" && @vente.client.present?
         Avoir.create!(
           client:    @vente.client,
@@ -170,24 +169,24 @@ module Caisse
         )
       end
 
-      # 7) Enregistrement de l’annulation dans la blockchain
+      # 9) Ajout dans la blockchain
       Blockchain::Service.add_block({
-        vente_id: @vente.id,
-        type: 'Annulation',
-        total: @vente.total_net.to_s,
-        client: @vente.client&.nom,
+        vente_id:      @vente.id,
+        type:          'Annulation',
+        total:         @vente.total_net.to_s,
+        client:        @vente.client&.nom,
         remboursement: mode_remboursement,
-        motif: params[:motif_annulation],
+        motif:         params[:motif_annulation],
         produits: @vente.ventes_produits.map do |vp|
           {
-            nom: vp.produit.nom,
+            nom:      vp.produit.nom,
             quantite: vp.quantite,
-            prix: vp.prix_unitaire
+            prix:     vp.prix_unitaire
           }
         end
       })
 
-
+      # 10) Fin
       redirect_to ventes_path, notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
     end
 
@@ -380,30 +379,31 @@ module Caisse
           vp.produit.decrement!(:stock, vp.quantite)
         end
 
-        # 7) Enregistrement du mouvement “entrée” (espèces encaissées) **avant** tout rendu
+        # 7) Enregistrement du mouvement “entrée” (espèces encaissées)
         if @vente.espece.to_f > 0
           MouvementEspece.create!(
             sens:    "entrée",
             motif:   "Paiement client - Vente n°#{@vente.id}",
             montant: @vente.espece.round(2),
             date:    @vente.date_vente,
-            compte:  nil
+            compte:  nil,
+            vente_id:   @vente.id
           )
         end
 
         # 8) Enregistrement du rendu de monnaie (mouvement “sortie”), si nécessaire
         if @vente.espece.to_f > 0
-          autres_paiements   = @vente.cb.to_f + @vente.cheque.to_f + @vente.amex.to_f
-          reste_apres_autres = @vente.total_net + montant_avoir.to_f - autres_paiements
-          rendu              = @vente.espece.to_f - reste_apres_autres
+          total_verse = @vente.espece.to_d + @vente.cb.to_d + @vente.cheque.to_d + @vente.amex.to_d + montant_avoir.to_d
+          rendu = (total_verse - @vente.total_net.to_d).round(2)
 
           if rendu.positive?
             MouvementEspece.create!(
               sens:    "sortie",
               motif:   "Rendu monnaie - Vente n°#{@vente.id}",
-              montant: rendu.round(2),
+              montant: rendu,
               date:    @vente.date_vente,
-              compte:  nil
+              compte:  nil,
+              vente_id:   @vente.id
             )
           end
         end
@@ -417,7 +417,7 @@ module Caisse
         if reste_credit && reste_credit > 0
           Avoir.create!(
             client:    avoir_utilise.client,
-            vente:     @vente,
+            vente_id:     @vente.id,
             montant:   reste_credit,
             utilise:   false,
             date:      Date.today,

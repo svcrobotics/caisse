@@ -120,11 +120,27 @@
                       <%= f.text_area :motif_annulation, rows: 3, class: "w-full border rounded p-2" %>
                     </div>
 
-                    <% if vente.espece.to_f == 0 %>
+                    <% total_cb = vente.cb.to_f
+                       total_especes = vente.espece.to_f %>
+
+                    <% if total_cb > 0 && total_especes == 0 %>
+                      <!-- Cas CB uniquement -->
                       <div class="mb-3">
                         <%= label_tag :remboursement, "Type de remboursement", class: "block text-sm font-medium" %>
                         <%= select_tag :remboursement, options_for_select([["Aucun", "aucun"], ["Espèces", "especes"], ["CB (Sur le TPE)", "cb"], ["Avoir", "avoir"]]), class: "w-full border rounded p-2" %>
                       </div>
+                    <% elsif total_especes > 0 && total_cb == 0 %>
+                      <!-- Cas Espèces uniquement -->
+                      <p class="text-sm text-gray-700 italic mb-2">Cette vente a été payée en espèces. Le remboursement se fera automatiquement en espèces.</p>
+                    <% elsif total_cb > 0 && total_especes > 0 %>
+                      <!-- Paiement mixte -->
+                      <div class="mb-3">
+                        <%= label_tag :remboursement, "Type de remboursement", class: "block text-sm font-medium" %>
+                        <%= select_tag :remboursement, options_for_select([["Espèces (total)", "especes"], ["CB (partie CB uniquement)", "cb"], ["Avoir", "avoir"]]), class: "w-full border rounded p-2" %>
+                      </div>
+                    <% else %>
+                      <!-- Aucune information sur le paiement -->
+                      <p class="text-sm text-red-600 italic">⚠️ Impossible de déterminer le mode de paiement.</p>
                     <% end %>
 
                     <%= f.submit "Confirmer l'annulation", class: "bg-red-600 text-white px-4 py-2 rounded" %>
@@ -135,6 +151,7 @@
               <p class="text-red-500 font-bold">Vente annulée.</p>
               <p class="text-sm text-gray-600">Motif : <%= vente.motif_annulation %></p>
             <% end %>
+
           </div>
         </div>
       <% end %>

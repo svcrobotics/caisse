@@ -17,6 +17,7 @@ module Caisse
     before_save :calculer_total
 
     validates :motif_annulation, presence: true, if: :annulee?
+    
 
     after_commit :mettre_a_jour_produits_vendus
 

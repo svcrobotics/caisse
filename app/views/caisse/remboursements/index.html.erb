@@ -26,7 +26,7 @@
             <% end %>
           </td>
           <td class="px-4 py-2 border"><%= number_to_currency(r.montant) %></td>
-          <td class="px-4 py-2 border"><%= r.mode.capitalize %></td>
+          <td class="px-4 py-2 border"><%= r.mode == "aucun" ? "Aucun" : r.mode.upcase %></td>
           <td class="px-4 py-2 border"><%= r.motif %></td>
         </tr>
       <% end %>
@@ -44,7 +44,7 @@
     <thead>
       <tr>
         <th class="px-4 py-2 border">Heure</th>
-        <th class="px-4 py-2 bord**er**">Motif</th>
+        <th class="px-4 py-2 border">Motif</th>
         <th class="px-4 py-2 border">Compte</th>
         <th class="px-4 py-2 border">Montant</th>
       </tr>
