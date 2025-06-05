@@ -14,5 +14,36 @@ module Caisse
                             .where(date: @aujourd_hui, sens: "sortie")
                             .order(created_at: :desc)
     end
+
+    def create
+      remboursement = Caisse::Remboursement.create!(remboursement_params)
+
+      produit = Produit.find(params[:produit_id])
+
+      # 🔐 Enregistrement du remboursement produit dans la blockchain
+      Blockchain::Service.add_block({
+        vente_id: remboursement.vente.id,
+        type: 'Remboursement produit',
+        produits: [
+          {
+            nom: produit.nom,
+            quantite: 1,
+            prix: produit.prix
+          }
+        ],
+        remboursement: remboursement.mode,
+        motif: remboursement.motif,
+        client: remboursement.vente.client&.nom
+      })
+
+      redirect_to caisse_remboursements_path, notice: "✅ Remboursement enregistré et certifié"
+    end
+
+    private
+
+    def remboursement_params
+      params.require(:remboursement).permit(:vente_id, :mode, :montant, :motif, :date)
+    end
+
   end
 end

@@ -1,5 +1,5 @@
 module Caisse
-  class VentesController < ApplicationController
+  class VentesController < ApplicationController 
     before_action :set_vente, only: %i[show destroy imprimer_ticket]
 
     def index
@@ -169,6 +169,24 @@ module Caisse
           remarques: "Annulation de la vente n°#{@vente.id}"
         )
       end
+
+      # 7) Enregistrement de l’annulation dans la blockchain
+      Blockchain::Service.add_block({
+        vente_id: @vente.id,
+        type: 'Annulation',
+        total: @vente.total_net.to_s,
+        client: @vente.client&.nom,
+        remboursement: mode_remboursement,
+        motif: params[:motif_annulation],
+        produits: @vente.ventes_produits.map do |vp|
+          {
+            nom: vp.produit.nom,
+            quantite: vp.quantite,
+            prix: vp.prix_unitaire
+          }
+        end
+      })
+
 
       redirect_to ventes_path, notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
     end
@@ -343,6 +361,20 @@ module Caisse
       ventes_produits.each { |vp| @vente.ventes_produits.build(vp) }
 
       if @vente.save
+        Blockchain::Service.add_block({
+          vente_id: @vente.id,
+          produits: @vente.ventes_produits.map do |ligne|
+            {
+              nom: ligne.produit.nom,
+              quantite: ligne.quantite,
+              prix: ligne.prix_unitaire
+            }
+          end,
+          total: @vente.total_net.to_s,
+          client: @vente.client&.nom,
+          type: 'Vente'
+        })
+
         # 6) Mise à jour du stock
         @vente.ventes_produits.each do |vp|
           vp.produit.decrement!(:stock, vp.quantite)
@@ -395,6 +427,7 @@ module Caisse
 
         # 11) Réinitialisation de la session et redirection
         session[:ventes] = {}
+
         redirect_to ventes_path, notice: "✅ Vente enregistrée avec succès."
       else
         redirect_to new_vente_path, alert: "❌ Erreur lors de l'enregistrement de la vente."
@@ -586,6 +619,23 @@ module Caisse
           motif: "Remboursement #{quantite_remb}x produit ##{@produit.id} : #{motif}",
           vente: @vente
         )
+
+        Blockchain::Service.add_block({
+          vente_id: @vente.id,
+          type: 'Remboursement produit',
+          produits: [
+            {
+              nom: @produit.nom,
+              quantite: quantite_remb,
+              prix: prix_unitaire
+            }
+          ],
+          total: montant.to_s,
+          remboursement: 'avoir',
+          motif: motif,
+          client: @vente.client&.nom
+        })
+
 
         redirect_to vente_path(@vente), notice: "Avoir émis (#{quantite_remb}x) : N°#{avoir.id} — #{montant} €"
       end
