@@ -15,11 +15,8 @@ Ce dépôt contient le module **Caisse** de l’application Boutique. Il gère l
    - [1. Gestion des ventes](#1-gestion-des-ventes)  
    - [2. Remboursements](#2-remboursements)  
    - [3. Mouvements en espèces](#3-mouvements-en-espèces)  
-   - [4. Clôtures de caisse](#4-clôtures-de-caisse)  
-7. [Tâches Rake utiles](#tâches-rake-utiles)  
-8. [Tests](#tests)  
-9. [Contribuer](#contribuer)  
-10. [Licence](#licence)  
+   - [4. Clôtures de caisse](#4-clôtures-de-caisse)   
+7. [Licence](#licence)  
 
 ---
 
@@ -81,7 +78,7 @@ Le module **Caisse** gère l’ensemble des opérations liées à la caisse du p
 
 1. **Cloner le dépôt**  
    ```bash
-   git clone https://github.com/votre-organisation/caisse.git
+   git clone https://github.com/svcrobotics/caisse.git
    cd caisse
 
 
@@ -244,59 +241,13 @@ caisse/
 
 ---
 
-## Tâches Rake utiles
-
-Quelques tâches personnalisées (si disponibles dans `lib/tasks`) :
-
-* **db\:seed\:caisse** : peuple des données de démonstration pour Caisse (produits, clients, etc.).
-* **cloture\:quotidienne** : génère en script la clôture Z du jour.
-* **cloture\:mensuelle** : génère en script la clôture mensuelle pour `mthemonth` (format `YYYY-MM`).
-
-*(Adapter ces noms de tâches si elles ne sont pas existantes — ou les créer dans `lib/tasks`.)*
-
----
-
-## Tests
-
-Si vous avez mis en place des specs RSpec ou des tests Minitest :
-
-1. **Installer les gems de test** (RSpec, FactoryBot, etc.) :
-
-   ```bash
-   bundle install --with test
-   ```
-2. **Lancer la suite** :
-
-   * RSpec : `bundle exec rspec`
-   * Minitest : `rails test`
-
-Vérifiez que toutes les fonctionnalités (vente, remboursement, mouvement\_espece, clôtures) sont couvertes.
-
----
-
-## Contribuer
-
-1. Forkez ce dépôt.
-2. Créez une branche de fonctionnalité : `git checkout -b feature/ma-nouvelle-fonctionnalité`
-3. Codez vos changements et ajoutez des tests.
-4. Faites un commit clair :
-
-   ```
-   git add .
-   git commit -m "Ajoute XYZ dans cloture_z pour gérer le cas ABC"
-   ```
-5. Poussez votre branche sur votre fork et créez une Pull Request.
-6. Attendez la revue, corrigez éventuels retours, puis fusionnez.
-
----
-
 ## Licence
 
 Ce projet est distribué sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
 
 ---
 
-> **Note :** Le module Caisse fait partie de l’application [Boutique](https://github.com/votre-organisation/boutique), qui l’intègre en tant que moteur Rails (Engine). Pour toute modification, assurez-vous que les routes et migrations de Caisse restent cohérentes lorsqu’elles sont appelées depuis l’application principale.
+> **Note :** Le module Caisse fait partie de l’application [Boutique](https://github.com/svcrobotics/boutique), qui l’intègre en tant que moteur Rails (Engine). Pour toute modification, assurez-vous que les routes et migrations de Caisse restent cohérentes lorsqu’elles sont appelées depuis l’application principale.
 
 ```
 ```
