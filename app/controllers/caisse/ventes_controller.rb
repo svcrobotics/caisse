@@ -461,7 +461,25 @@ module Caisse
       date_debut = Date.parse("#{mois}-01")
       date_fin = date_debut.end_of_month.end_of_day
 
-      ventes = Caisse::Vente.includes(ventes_produits: { produit: :client }, client: {}, versements: {}).where(date_vente: date_debut..date_fin)
+      ventes = Caisse::Vente
+        .includes(ventes_produits: { produit: :client }, client: {}, versements: {})
+        .where(date_vente: date_debut..date_fin)
+
+      # Exclure les ventes annulées selon la colonne disponible
+      cols = Caisse::Vente.column_names
+      ventes =
+        if cols.include?("annulee")
+          ventes.where(annulee: [false, nil])
+        elsif cols.include?("annulee_at")
+          ventes.where(annulee_at: nil)
+        elsif cols.include?("status")
+          ventes.where.not(status: %w[annule annulee canceled])
+        elsif cols.include?("etat")
+          ventes.where.not(etat: %w[annule annulee canceled])
+        else
+          ventes
+        end
+
 
       p = Axlsx::Package.new
       wb = p.workbook
