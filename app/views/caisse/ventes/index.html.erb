@@ -54,21 +54,6 @@
       class: "bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" %>
   </div>
 
-  <div class="grid grid-cols-2 gap-4 mb-6">
-    <div class="bg-blue-100 border border-blue-300 p-4 rounded">
-      <p class="text-sm text-blue-800 font-semibold">📅 Ventes aujourd’hui</p>
-      <p class="text-lg font-bold">
-        <%= @stats[:today_count] %> ventes — <%= number_to_currency(@stats[:today_total]) %>
-      </p>
-    </div>
-
-    <div class="bg-green-100 border border-green-300 p-4 rounded">
-      <p class="text-sm text-green-800 font-semibold">📆 Ventes ce mois-ci</p>
-      <p class="text-lg font-bold">
-        <%= @stats[:month_count] %> ventes — <%= number_to_currency(@stats[:month_total]) %>
-      </p>
-    </div>
-  </div>
 
   <h1 class="text-2xl font-bold mb-6">📦 Export des ventes</h1>
 
