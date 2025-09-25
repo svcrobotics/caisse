@@ -267,3 +267,14 @@
     </div>
   <% end %>
 </div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("vente-form");
+    form.addEventListener("keydown", function(event) {
+      if (event.key === "Enter") {
+        event.preventDefault(); // bloque la soumission par Enter
+      }
+    });
+  });
+</script>
