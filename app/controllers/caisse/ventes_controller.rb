@@ -28,23 +28,19 @@ module Caisse
       this_month = Date.current.beginning_of_month..Date.current.end_of_month
 
       @stats = {
-        today_count: Caisse::Vente.where(created_at: today).count,
-        today_total: Caisse::Vente.where(created_at: today).sum(:total_net),
-        month_count: Caisse::Vente.where(created_at: this_month).count,
-        month_total: Caisse::Vente.where(created_at: this_month).sum(:total_net)
+        today_count: Caisse::Vente.where(date_vente: today).count,
+        today_total: Caisse::Vente.where(date_vente: today).sum(:total_net),
+        month_count: Caisse::Vente.where(date_vente: this_month).count,
+        month_total: Caisse::Vente.where(date_vente: this_month).sum(:total_net)
       }
     end
 
     def show
       @avoir_utilise = Avoir.find_by(vente_id: @vente.id, utilise: true)
-      @avoir_emis    = Avoir.find_by(vente_id: @vente.id, utilise: false)
+      @avoir_emis    = Avoir.where(vente_id: @vente.id, utilise: false)
 
       # Calcul du reste à payer après utilisation de l'avoir (à titre indicatif)
-      @reste = if @avoir_utilise
-        @vente.total_brut - @avoir_utilise.montant
-      else
-        @vente.total_brut
-      end
+      @reste = @vente.total_net - (@avoir_utilise&.montant.to_d || 0)
     end
 
     def new
@@ -476,7 +472,7 @@ module Caisse
     end
 
     def imprimer_ticket
-      imprimer_ticket_texte(vente)
+      imprimer_ticket_texte(@vente)
       redirect_to ventes_path, notice: "Ticket imprimé avec succès."
     end
 
@@ -484,13 +480,12 @@ module Caisse
       require "caxlsx_rails"
 
       mois = params[:mois] || (Date.today << 1).strftime("%Y-%m")
-
       date_debut = Date.parse("#{mois}-01")
-      date_fin = date_debut.end_of_month.end_of_day
+      date_fin   = date_debut.end_of_month.end_of_day
 
       ventes = Caisse::Vente
-        .includes(ventes_produits: { produit: :client }, client: {}, versements: {})
-        .where(date_vente: date_debut..date_fin)
+                 .includes(ventes_produits: { produit: :client }, client: {}, versements: {})
+                 .where(date_vente: date_debut..date_fin)
 
       # Exclure les ventes annulées selon la colonne disponible
       cols = Caisse::Vente.column_names
@@ -507,48 +502,66 @@ module Caisse
           ventes
         end
 
+      # ⚡ Précharge tous les avoirs (utilisés et émis) pour les ventes du périmètre
+      vente_ids = ventes.pluck(:id)
+      avoirs_utilises_by_vente = Avoir.where(vente_id: vente_ids, utilise: true).group_by(&:vente_id)
+      avoirs_emis_by_vente     = Avoir.where(vente_id: vente_ids, utilise: false).group_by(&:vente_id)
 
-      p = Axlsx::Package.new
+      p  = Axlsx::Package.new
       wb = p.workbook
 
       wb.add_worksheet(name: "Ventes #{mois}") do |sheet|
         sheet.add_row [
           "Date de vente", "Numéro de la vente", "Nom du produit", "Catégorie", "État",
-          "Taux de TVA", "Prix d'achat", "Prix déposant", "Quantité", "Remise (€)", "Total déposant", "Prix vente TTC (net)", "Marge",
-          "Nom de la déposante", "Date de versement", "Reçu", "Mode de paiement cliente", "Mode de versement déposante", 
-          "Avoir utilisé n°", "Montant avoir utilisé", "Avoir émis n°", "Montant avoir émis"
+          "Taux de TVA", "Prix d'achat", "Prix déposant", "Quantité", "Remise (€)", "Total déposant",
+          "Prix vente TTC (net)", "Marge", "Nom de la déposante", "Date de versement", "Reçu",
+          "Mode de paiement cliente", "Mode de versement déposante",
+          "Avoir utilisé n°", "Montant avoir utilisé",
+          "Avoir émis n°", "Montant avoir émis"
         ]
 
         ventes.each do |vente|
           # Déduire le mode de paiement réel (multi)
           paiements = []
-          paiements << "CB" if vente.cb.to_d > 0
+          paiements << "CB"      if vente.cb.to_d     > 0
           paiements << "Espèces" if vente.espece.to_d > 0
-          paiements << "Chèque" if vente.cheque.to_d > 0
-          paiements << "AMEX" if vente.amex.to_d > 0
+          paiements << "Chèque"  if vente.cheque.to_d > 0
+          paiements << "AMEX"    if vente.amex.to_d   > 0
           mode_paiement = paiements.join(" + ")
 
+          # 🔎 Récup avoirs pour cette vente (utilisés & émis) — gère 0..n éléments
+          au = (avoirs_utilises_by_vente[vente.id] || [])
+          ae = (avoirs_emis_by_vente[vente.id]     || [])
+
+          au_ids      = au.map(&:id).join(", ")
+          au_montants = au.map { |a| sprintf("%.2f", a.montant.to_d) }.join(" + ")
+
+          ae_ids      = ae.map(&:id).join(", ")
+          ae_montants = ae.map { |a| sprintf("%.2f", a.montant.to_d) }.join(" + ")
+
           vente.ventes_produits.each do |vp|
-            produit = vp.produit
-            quantite = vp.quantite
-            prix_unit = vp.prix_unitaire
-            prix_achat = produit.prix_achat
+            produit        = vp.produit
+            quantite       = vp.quantite
+            prix_unit      = vp.prix_unitaire
+            prix_achat     = produit.prix_achat
             prix_deposante = produit.prix_deposant || 0
             total_deposant = quantite * prix_deposante
-            remise_pct = vp.remise.to_d
-            total_brut = prix_unit * quantite
-            remise_euros = (total_brut * remise_pct / 100).round(2)
-            total_ttc = total_brut - remise_euros
+            remise_pct     = vp.remise.to_d
+            total_brut     = prix_unit * quantite
+            remise_euros   = (total_brut * remise_pct / 100).round(2)
+            total_ttc      = total_brut - remise_euros
 
             deposante = produit.client if produit.en_depot?
-            versement = Versement.joins(:ventes).where(ventes: { id: vente.id }, client: deposante).first if deposante
+            versement = if deposante
+                           Versement.joins(:ventes).where(ventes: { id: vente.id }, client: deposante).first
+                         end
 
             # TVA
             if produit.etat == "neuf"
-              tva = (total_ttc / 1.2 * 0.2).round(2)
+              tva      = (total_ttc / 1.2 * 0.2).round(2)
               taux_tva = "20%"
             else
-              tva = 0
+              tva      = 0
               taux_tva = "0%"
             end
 
@@ -564,15 +577,10 @@ module Caisse
                 total_ttc
               end
 
-            # Infos déposante
-            nom_deposante = deposante ? "#{deposante.prenom} #{deposante.nom}" : "N/A"
-            date_versement = versement&.created_at&.strftime("%d/%m/%Y") || "N/A"
-            numero_recu = versement&.numero_recu || "N/A"
+            nom_deposante   = deposante ? "#{deposante.prenom} #{deposante.nom}" : "N/A"
+            date_versement  = versement&.created_at&.strftime("%d/%m/%Y") || "N/A"
+            numero_recu     = versement&.numero_recu || "N/A"
             methode_versement = versement&.methode_paiement || "N/A"
-
-            # Gestion des avoirs
-            avoir_utilise = Avoir.find_by(vente_id: vente.id, utilise: true)
-            avoir_emis = Avoir.find_by(vente_id: vente.id, utilise: false)
 
             sheet.add_row [
               vente.date_vente.strftime("%Y-%m-%d"),
@@ -593,10 +601,10 @@ module Caisse
               numero_recu,
               mode_paiement,
               methode_versement,
-              avoir_utilise&.id || "",
-              (avoir_utilise&.montant ? sprintf("%.2f", avoir_utilise.montant) : ""),
-              avoir_emis&.id || "",
-              (avoir_emis&.montant ? sprintf("%.2f", avoir_emis.montant) : "")
+              au_ids,
+              au_montants,
+              ae_ids,
+              ae_montants
             ]
           end
         end
