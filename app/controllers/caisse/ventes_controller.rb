@@ -740,10 +740,10 @@ module Caisse
       lignes = []
 
       # 🏷️ En-tête boutique
-      lignes << "VINTAGE ROYAN".center(largeur)
-      lignes << "3bis rue Notre Dame".center(largeur)
-      lignes << "17200 Royan".center(largeur)
-      lignes << "Tel: 0546778080".center(largeur)
+      lignes << "ROMANCE".center(largeur)
+      lignes << "".center(largeur)
+      lignes << "17".center(largeur)
+      lignes << "Tel: ".center(largeur)
       lignes << "-" * largeur
       lignes << "*** VENTE ***".center(largeur)
       lignes << "-" * largeur

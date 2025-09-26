@@ -86,6 +86,26 @@
               ].compact.join(" · ").html_safe %> — 
               Total : <strong><%= number_to_currency(vente.total_net) %></strong>
             </p>
+            <p class="text-sm text-gray-600 flex items-center gap-2">
+              <span>Client : <%= vente.client&.nom || "Sans client" %></span>
+
+              <!-- Encadré mode de paiement -->
+              <% paiements = [] %>
+              <% paiements << content_tag(:span, "CB: #{number_to_currency(vente.cb)}", class: "px-2 py-1 border rounded bg-blue-50 font-semibold text-blue-700") if vente.cb.to_f > 0 %>
+              <% paiements << content_tag(:span, "Espèces: #{number_to_currency(vente.espece)}", class: "px-2 py-1 border rounded bg-green-50 font-semibold text-green-700") if vente.espece.to_f > 0 %>
+              <% paiements << content_tag(:span, "Chèque: #{number_to_currency(vente.cheque)}", class: "px-2 py-1 border rounded bg-yellow-50 font-semibold text-yellow-700") if vente.cheque.to_f > 0 %>
+              <% paiements << content_tag(:span, "AMEX: #{number_to_currency(vente.amex)}", class: "px-2 py-1 border rounded bg-purple-50 font-semibold text-purple-700") if vente.amex.to_f > 0 %>
+
+              <span class="flex items-center gap-1">
+                Paiement :
+                <%= safe_join(paiements, " ".html_safe) %>
+              </span>
+
+              <!-- Encadré total -->
+              <span class="ml-auto px-3 py-1 border-2 rounded bg-gray-100 font-bold text-gray-800">
+                Total : <%= number_to_currency(vente.total_net) %>
+              </span>
+            </p>
           </div>
 
           <div class="flex gap-2">
