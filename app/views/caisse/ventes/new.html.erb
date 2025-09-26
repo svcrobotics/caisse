@@ -267,6 +267,15 @@
       <button type="button" class="w-full bg-green-600 text-white font-semibold text-lg py-3 rounded hover:bg-green-700" onclick="document.getElementById('encaissement-form').requestSubmit()">
         💳 Encaisser maintenant
       </button>
+      <% if @vente && @vente.errors.any? %>
+        <div class="mt-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">
+          <ul class="list-disc pl-5">
+            <% @vente.errors.full_messages.each do |m| %>
+              <li><%= m %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
     </div>
   <% end %>
 </div>
