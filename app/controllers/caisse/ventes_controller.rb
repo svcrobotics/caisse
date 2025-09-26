@@ -680,7 +680,7 @@ module Caisse
 
     def vente_params
       params.require(:vente).permit(:client_id, :mode_paiement,
-        ventes_produits_attributes: [ :id, :produit_id, :code_barre, :quantite, :prix_unitaire, :_destroy ])
+        ventes_produits_attributes: [ :id, :produit_id, :code_barre, :quantite, :prix_unitaire, :_destroy, :remise_globale_manuel ])
     end
 
     def correct_scanner_input(input)

@@ -57,11 +57,7 @@
           <% quantite = @quantites[id] %>
           <% valeur = session[:ventes][produit.id.to_s] rescue {} %>
           <% remise = valeur.is_a?(Hash) ? valeur["remise"].to_d : 0.to_d %>
-          <% prix_unitaire = if produit.en_promo? && produit.prix_promo.present?
-                               produit.prix_promo
-                             else
-                               produit.prix
-                             end %>
+          <% prix_unitaire = if produit.en_promo? && produit.prix_promo.present?; produit.prix_promo else produit.prix end %>
           <% total_produit = (prix_unitaire * quantite * (1 - remise / 100)).round(2) %>
           <% total += total_produit %>
 
@@ -102,13 +98,15 @@
 
         <tr class="border-t font-semibold">
           <td colspan="4" class="px-4 py-2 text-right">Total :</td>
-          <td colspan="3" class="px-4 py-2 text-right"><%= number_to_currency(total) %></td>
+          <td colspan="3" class="px-4 py-2 text-right">
+            <span id="total-general"><%= number_to_currency(total) %></span>
+          </td>
         </tr>
       </tbody>
     </table>
   <% end %>
 
-  <!-- 🧾 Remise globale (Enter ne soumet pas le grand form ; recalcul côté JS) -->
+  <!-- 🧾 Remise globale (Enter applique ; ne soumet pas le grand form) -->
   <div class="mb-6">
     <label for="remise_globale_manuel" class="block text-sm font-medium text-gray-700 mb-1">
       🧾 Remise globale (€)
@@ -214,38 +212,46 @@
     <!-- JS de recalcul + MAJ du hidden reste_value -->
     <script>
       function majResteAPayer() {
+        // total "brut" issu des lignes
         let total = <%= total || 0 %>;
 
+        // 1) lire la remise globale (champ visible) et l’appliquer
         const remiseGlobale = parseFloat(document.getElementById("remise_globale_manuel")?.value) || 0;
-        total = Math.max(total - remiseGlobale, 0);
+        const totalNet = Math.max(total - remiseGlobale, 0);
 
+        // 2) pousser la remise dans le hidden du form d’encaissement
         const hiddenRemise = document.getElementById("hidden_remise_globale_manuel");
         if (hiddenRemise) hiddenRemise.value = remiseGlobale;
 
+        // 3) tenir compte d’un avoir choisi (⚠️ scope unique)
+        let totalApresAvoir = totalNet;
         <% if params[:avoir_id].present? && (avoir = Avoir.find_by(id: params[:avoir_id])) %>
-          total -= <%= avoir.montant %>;
+          totalApresAvoir = Math.max(totalNet - <%= avoir.montant %>, 0);
         <% end %>
 
+        // 4) paiements saisis
         const cb     = parseFloat(document.getElementById("cb")?.value) || 0;
         const espece = parseFloat(document.getElementById("espece")?.value) || 0;
         const cheque = parseFloat(document.getElementById("cheque")?.value) || 0;
         const amex   = parseFloat(document.getElementById("amex")?.value) || 0;
 
         const total_paye = cb + espece + cheque + amex;
-        const reste = Math.max(total - total_paye, 0);
-        const rendu = Math.max(espece - (total - cb - cheque - amex), 0);
 
-        const resteElement = document.getElementById("reste-a-payer");
-        if (resteElement) {
-          resteElement.textContent = reste.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
-        }
+        // 5) calculs finaux
+        const reste = Math.max(totalApresAvoir - total_paye, 0);
+        const rendu = Math.max(espece - (totalApresAvoir - cb - cheque - amex), 0);
 
-        const renduElement = document.getElementById("rendre");
-        if (renduElement) {
-          renduElement.textContent = rendu.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
-        }
+        // 6) MAJ affichage
+        const totalEl = document.getElementById("total-general");
+        if (totalEl) totalEl.textContent = totalNet.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
-        // 🔒 Guard Enter : garder la valeur numérique pour le submit listener
+        const resteEl = document.getElementById("reste-a-payer");
+        if (resteEl) resteEl.textContent = reste.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+
+        const renduEl = document.getElementById("rendre");
+        if (renduEl) renduEl.textContent = rendu.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+
+        // 7) Guard Enter : garder la valeur numérique pour le submit listener
         const resteHidden = document.getElementById("reste_value");
         if (resteHidden) resteHidden.value = reste.toFixed(2);
       }
@@ -273,7 +279,7 @@
   <% end %>
 </div>
 
-<!-- Guard de soumission : Enter n’est autorisé que si reste == 0 ; clic bouton toujours OK -->
+<!-- Guards : Enter n’est autorisé que si reste == 0 ; clic bouton toujours OK -->
 <script>
 (function() {
   var submitByButton = false;
@@ -294,17 +300,32 @@
     // Toute tentative de submit (Enter, etc.) dans CE form :
     form.addEventListener("submit", function(e) {
       var reste = parseFloat(document.getElementById("reste_value")?.value);
-      // Si submit n'est PAS initié par le bouton et qu'il reste > 0 → on bloque
       if (!submitByButton && (isNaN(reste) || reste > 0.00001)) {
         e.preventDefault();
         return false;
       }
-      // reset pour éviter un second submit involontaire
       submitByButton = false;
     });
   }
 
   document.addEventListener("DOMContentLoaded", bindEncaissementGuards);
   document.addEventListener("turbo:load", bindEncaissementGuards);
+})();
+</script>
+
+<!-- Remise globale : Enter applique et passe au champ CB -->
+<script>
+(function() {
+  const remise = document.getElementById("remise_globale_manuel");
+  if (!remise) return;
+
+  remise.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      majResteAPayer();
+      const cb = document.getElementById("cb");
+      if (cb) cb.focus();
+    }
+  });
 })();
 </script>

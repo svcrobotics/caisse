@@ -29,13 +29,6 @@ module Caisse
 
     # ── Méthodes spécifiques ────────────────────────────────────────────────────
 
-    attr_accessor :remise_globale_manuel
-
-    # Montant de remise globale saisi (en €)
-    def montant_remise_globale
-      (remise_globale_manuel.presence || 0).to_d
-    end
-
     # Avoir utilisé (côté vente)
     def avoir_utilise
       Avoir.find_by(vente_id: id, utilise: true)
@@ -89,8 +82,7 @@ module Caisse
 
     # Montant restant à encaisser après avoir (jamais négatif)
     def reste_a_payer
-      base = montant_total - montant_avoir_utilise - montant_remise_globale
-      [base, 0.to_d].max
+      [montant_total - montant_avoir_utilise, 0.to_d].max
     end
 
     # Somme réellement saisie dans les modes de paiement
