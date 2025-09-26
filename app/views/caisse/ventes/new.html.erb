@@ -281,51 +281,51 @@
 
 <!-- Guards : Enter n’est autorisé que si reste == 0 ; clic bouton toujours OK -->
 <script>
-(function() {
-  var submitByButton = false;
+  (function() {
+    var submitByButton = false;
 
-  function bindEncaissementGuards() {
-    var form = document.getElementById("encaissement-form");
-    var btn  = document.getElementById("encaisser-btn");
-    if (!form) return;
+    function bindEncaissementGuards() {
+      var form = document.getElementById("encaissement-form");
+      var btn  = document.getElementById("encaisser-btn");
+      if (!form) return;
 
-    // Clic explicite → toujours autorisé (passe par les validations serveur)
-    if (btn) {
-      btn.addEventListener("click", function() {
-        submitByButton = true;
-        form.requestSubmit();
+      // Clic explicite → toujours autorisé (passe par les validations serveur)
+      if (btn) {
+        btn.addEventListener("click", function() {
+          submitByButton = true;
+          form.requestSubmit();
+        });
+      }
+
+      // Toute tentative de submit (Enter, etc.) dans CE form :
+      form.addEventListener("submit", function(e) {
+        var reste = parseFloat(document.getElementById("reste_value")?.value);
+        if (!submitByButton && (isNaN(reste) || reste > 0.00001)) {
+          e.preventDefault();
+          return false;
+        }
+        submitByButton = false;
       });
     }
 
-    // Toute tentative de submit (Enter, etc.) dans CE form :
-    form.addEventListener("submit", function(e) {
-      var reste = parseFloat(document.getElementById("reste_value")?.value);
-      if (!submitByButton && (isNaN(reste) || reste > 0.00001)) {
-        e.preventDefault();
-        return false;
-      }
-      submitByButton = false;
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", bindEncaissementGuards);
-  document.addEventListener("turbo:load", bindEncaissementGuards);
-})();
+    document.addEventListener("DOMContentLoaded", bindEncaissementGuards);
+    document.addEventListener("turbo:load", bindEncaissementGuards);
+  })();
 </script>
 
 <!-- Remise globale : Enter applique et passe au champ CB -->
 <script>
-(function() {
-  const remise = document.getElementById("remise_globale_manuel");
-  if (!remise) return;
+  (function() {
+    const remise = document.getElementById("remise_globale_manuel");
+    if (!remise) return;
 
-  remise.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      majResteAPayer();
-      const cb = document.getElementById("cb");
-      if (cb) cb.focus();
-    }
-  });
-})();
+    remise.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        majResteAPayer();
+        const cb = document.getElementById("cb");
+        if (cb) cb.focus();
+      }
+    });
+  })();
 </script>

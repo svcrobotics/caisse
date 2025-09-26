@@ -190,7 +190,6 @@ module Caisse
       redirect_to ventes_path, notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
     end
 
-
     def recherche_produit
       code = correct_scanner_input(params[:code_barre])
       produit = Produit.find_by(code_barre: code)
@@ -272,7 +271,7 @@ module Caisse
       # ─────────────────────────────────────────────────────────────────────────────
       # 1) Préparation des lignes + totaux
       # ─────────────────────────────────────────────────────────────────────────────
-      client         = params[:sans_client] == "1" ? nil : Client.find_by(nom: params[:client_nom])
+      client = lookup_client_from_params
       total_brut     = 0.to_d
       total_net_lignes = 0.to_d
       lignes         = []
@@ -684,6 +683,19 @@ module Caisse
 
 
     private
+
+    def lookup_client_from_params
+      raw = params[:client_nom].to_s.strip
+      return nil if raw.blank? || params[:sans_client] == "1"
+
+      client = Client.where("LOWER(nom) = ?", raw.downcase).first
+      return client if client
+
+      matches = Client.where("LOWER(nom) LIKE ?", "%#{raw.downcase}%").limit(2).to_a
+      return matches.first if matches.size == 1
+
+      nil
+    end
 
     def calculer_total_session
       ventes_data = session[:ventes] || {}
