@@ -75,20 +75,7 @@
             <p class="font-semibold text-lg">
               🧾 Vente n°<%= vente.id %> — <%= l(vente.date_vente || vente.created_at, format: :short) %>
             </p>
-            <p class="text-sm text-gray-600">
-              Client : <%= vente.client&.nom || "Sans client" %> — 
-              Paiement :
-              <%= [
-                ("CB: #{number_to_currency(vente.cb)}" if vente.cb.to_f > 0),
-                ("Espèces: #{number_to_currency(vente.espece)}" if vente.espece.to_f > 0),
-                ("Chèque: #{number_to_currency(vente.cheque)}" if vente.cheque.to_f > 0),
-                ("AMEX: #{number_to_currency(vente.amex)}" if vente.amex.to_f > 0)
-              ].compact.join(" · ").html_safe %> — 
-              Total : <strong><%= number_to_currency(vente.total_net) %></strong>
-            </p>
             <p class="text-sm text-gray-600 flex items-center gap-2">
-              <span>Client : <%= vente.client&.nom || "Sans client" %></span>
-
               <!-- Encadré mode de paiement -->
               <% paiements = [] %>
               <% paiements << content_tag(:span, "CB: #{number_to_currency(vente.cb)}", class: "px-2 py-1 border rounded bg-blue-50 font-semibold text-blue-700") if vente.cb.to_f > 0 %>
