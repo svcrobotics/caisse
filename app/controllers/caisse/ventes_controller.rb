@@ -573,7 +573,6 @@ module Caisse
             # Gestion des avoirs
             avoir_utilise = Avoir.find_by(vente_id: vente.id, utilise: true)
             avoir_emis = Avoir.where(vente_id: vente.id, utilise: false)
-                              .where("remarques LIKE ?", "%Solde restant%").first
 
             sheet.add_row [
               vente.date_vente.strftime("%Y-%m-%d"),
