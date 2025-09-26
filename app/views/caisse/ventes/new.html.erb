@@ -193,7 +193,7 @@
       </div>
     </div>
 
-    <% total_paye = params[:cb].to_d + params[:espece].to_d + params[:cheque].to_d + params[:amex].to_d rescue 0.to_d %>
+    <% total_paye = (params[:cb]||0).to_d + (params[:espece]||0).to_d + (params[:cheque]||0).to_d + (params[:amex]||0).to_d %>
     <% reste = (reste_apres_avoir || total) - total_paye %>
 
     <div class="mt-6 p-4 bg-gray-100 border border-gray-300 rounded-lg">

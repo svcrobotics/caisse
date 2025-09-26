@@ -261,144 +261,141 @@ module Caisse
     end
 
     def create
-      # Panier en session obligatoire
       session[:ventes] ||= {}
       ventes_data = session[:ventes]
-      if ventes_data.blank?
+
+      if ventes_data.empty?
         redirect_to new_vente_path, alert: "Aucun produit à encaisser."
         return
       end
 
-      # ─────────────────────────────────────────────────────────────────────────────
-      # 1) Préparation des lignes + totaux
-      # ─────────────────────────────────────────────────────────────────────────────
-      client         = params[:sans_client] == "1" ? nil : Client.find_by(nom: params[:client_nom])
-      total_brut     = 0.to_d
-      total_net_lignes = 0.to_d
-      lignes         = []
+      # 1) Initialisation
+      remise_globale  = 0.to_d
+      client          = params[:sans_client] == "1" ? nil : Client.find_by(nom: params[:client_nom])
+
+      total_brut      = 0.to_d
+      total_net       = 0.to_d
+      ventes_produits = []
 
       ventes_data.each do |produit_id_str, infos|
-        produit    = Produit.find(produit_id_str)
-        qte        = infos["quantite"].to_i
-        pu         = infos["prix"].to_d
-        remise_pct = infos["remise"].to_d # remise par ligne en %
+        produit        = Produit.find(produit_id_str)
+        quantite       = infos["quantite"].to_i
+        prix_unitaire  = infos["prix"].to_d
+        remise_pct     = infos["remise"].to_d
 
-        montant_brut   = pu * qte
-        remise_euros   = (montant_brut * (remise_pct / 100)).round(2)
-        montant_net    = (montant_brut - remise_euros).round(2)
+        # Calcul brut et net pour chaque ligne
+        total_ligne_brut = prix_unitaire * quantite
+        remise_euros     = (total_ligne_brut * (remise_pct / 100)).round(2)
+        total_ligne_net  = total_ligne_brut - remise_euros
 
-        lignes << { produit: produit, quantite: qte, prix_unitaire: pu, remise: remise_pct }
+        ventes_produits << {
+          produit:       produit,
+          quantite:      quantite,
+          prix_unitaire: prix_unitaire,
+          remise:        remise_pct
+        }
 
-        total_brut       += montant_brut
-        total_net_lignes += montant_net
+        total_brut += total_ligne_brut
+        total_net  += total_ligne_net
       end
 
-      # Base de calcul: total net après remises LIGNES
-      total_net = total_net_lignes
-
-      # ─────────────────────────────────────────────────────────────────────────────
-      # 2) Avoir (utilisation éventuelle)
-      # ─────────────────────────────────────────────────────────────────────────────
-      avoir_utilise = nil
-      reste_credit  = nil
-      montant_avoir = 0.to_d
+      # 2) Gestion de l’avoir
+      reste_credit   = nil
+      avoir_utilise  = nil
+      montant_avoir  = 0.to_d
 
       if params[:avoir_id].present?
         avoir_utilise = Avoir.find_by(id: params[:avoir_id], utilise: false)
         if avoir_utilise && (avoir_utilise.created_at >= 1.year.ago)
-          montant_avoir = avoir_utilise.montant.to_d
-          reste = total_net - montant_avoir
-          if reste <= 0
-            reste_credit = (montant_avoir - total_net).round(2) # on émettra un nouvel avoir
+          montant_avoir  = avoir_utilise.montant
+          reste_a_payer  = total_net - montant_avoir
+          if reste_a_payer <= 0
+            reste_credit = (montant_avoir - total_net).round(2)
             total_net    = 0.to_d
-            flash[:notice] ||= "✅ Vente à 0 € enregistrée via l’avoir."
+            flash[:notice] ||= "✅ Vente à 0€ enregistrée via l’avoir."
           else
-            total_net = reste.round(2)
+            total_net = reste_a_payer.round(2)
           end
         end
       end
 
-      # ─────────────────────────────────────────────────────────────────────────────
-      # 3) Remise globale manuelle (valeur en € depuis la vue)
-      #    + éventuellement un "total_final_manuel" si tu l'utilises encore
-      # ─────────────────────────────────────────────────────────────────────────────
-      remise_globale = 0.to_d
-
+      # 3) Si total manuel est fourni et inférieur au total_net
       if params[:total_final_manuel].present?
         total_final_manuel = params[:total_final_manuel].to_d
         if total_final_manuel < total_net
-          remise_globale += (total_net - total_final_manuel).round(2)
-          total_net       = total_final_manuel
+          remise_globale = (total_net - total_final_manuel).round(2)
+          total_net      = total_final_manuel
         end
       end
 
+      # 4) Remise globale manuelle (si fournie)
       if params[:remise_globale_manuel].present?
-        remise_globale += params[:remise_globale_manuel].to_d
-        total_net       = [total_net - params[:remise_globale_manuel].to_d, 0].max
+        remise_globale = params[:remise_globale_manuel].to_d
+        total_net      = [total_net - remise_globale, 0].max
       end
 
-      # ─────────────────────────────────────────────────────────────────────────────
-      # 4) Montants de paiement (sécurisés)
-      # ─────────────────────────────────────────────────────────────────────────────
-      cb     = (params[:cb]     || 0).to_d
-      espece = (params[:espece] || 0).to_d
-      cheque = (params[:cheque] || 0).to_d
-      amex   = (params[:amex]   || 0).to_d
+      montants = {
+        "CB"      => params[:cb].to_d,
+        "Espèces" => params[:espece].to_d,
+        "Chèque"  => params[:cheque].to_d,
+        "AMEX"    => params[:amex].to_d
+      }
 
-      # ─────────────────────────────────────────────────────────────────────────────
-      # 5) Création de la vente
-      # ─────────────────────────────────────────────────────────────────────────────
+      # Ajout du montant de l’avoir utilisé (si présent)
+      montant_avoir ||= 0.to_d
+
+      # 5) Création de la vente en base
       @vente = Caisse::Vente.new(
         client:         client,
         date_vente:     Time.current,
         total_brut:     total_brut.round(2),
         total_net:      total_net.round(2),
-        remise_globale: remise_globale.round(2),
-        cb:     cb,
-        espece: espece,
-        cheque: cheque,
-        amex:   amex
+        remise_globale: remise_globale,
+        cb:             params[:cb].to_d,
+        espece:         params[:espece].to_d,
+        cheque:         params[:cheque].to_d,
+        amex:           params[:amex].to_d
       )
-      lignes.each { |vp| @vente.ventes_produits.build(vp) }
+
+      ventes_produits.each { |vp| @vente.ventes_produits.build(vp) }
 
       if @vente.save
-        # ───────────────────────────────────────────────────────────────────────────
-        # 6) Blockchain (journalisation)
-        # ───────────────────────────────────────────────────────────────────────────
         Blockchain::Service.add_block({
           vente_id: @vente.id,
-          produits: @vente.ventes_produits.map { |ligne|
-            { nom: ligne.produit.nom, quantite: ligne.quantite, prix: ligne.prix_unitaire }
-          },
-          total:  @vente.total_net.to_s,
+          produits: @vente.ventes_produits.map do |ligne|
+            {
+              nom: ligne.produit.nom,
+              quantite: ligne.quantite,
+              prix: ligne.prix_unitaire
+            }
+          end,
+          total: @vente.total_net.to_s,
           client: @vente.client&.nom,
-          type:   'Vente'
+          type: 'Vente'
         })
 
-        # ───────────────────────────────────────────────────────────────────────────
-        # 7) Stock: décrémenter
-        # ───────────────────────────────────────────────────────────────────────────
+        # 6) Mise à jour du stock
         @vente.ventes_produits.each do |vp|
           vp.produit.decrement!(:stock, vp.quantite)
         end
 
-        # ───────────────────────────────────────────────────────────────────────────
-        # 8) Mouvements espèces: entrée et rendu le cas échéant
-        # ───────────────────────────────────────────────────────────────────────────
+        # 7) Enregistrement du mouvement “entrée” (espèces encaissées)
         if @vente.espece.to_f > 0
-          # Entrée espèces
           MouvementEspece.create!(
             sens:    "entrée",
             motif:   "Paiement client - Vente n°#{@vente.id}",
             montant: @vente.espece.round(2),
             date:    @vente.date_vente,
             compte:  nil,
-            vente_id: @vente.id
+            vente_id:   @vente.id
           )
+        end
 
-          # Rendu éventuel
+        # 8) Enregistrement du rendu de monnaie (mouvement “sortie”), si nécessaire
+        if @vente.espece.to_f > 0
           total_verse = @vente.espece.to_d + @vente.cb.to_d + @vente.cheque.to_d + @vente.amex.to_d + montant_avoir.to_d
           rendu = (total_verse - @vente.total_net.to_d).round(2)
+
           if rendu.positive?
             MouvementEspece.create!(
               sens:    "sortie",
@@ -406,22 +403,21 @@ module Caisse
               montant: rendu,
               date:    @vente.date_vente,
               compte:  nil,
-              vente_id: @vente.id
+              vente_id:   @vente.id
             )
           end
         end
 
-        # ───────────────────────────────────────────────────────────────────────────
-        # 9) Avoir: marquer utilisé + émettre un nouvel avoir si crédit
-        # ───────────────────────────────────────────────────────────────────────────
+        # 9) Marquer l’avoir comme utilisé
         if avoir_utilise
           avoir_utilise.update!(utilise: true, vente: @vente)
         end
 
-        if reste_credit && reste_credit > 0 && avoir_utilise&.client
+        # 10) Créer un nouvel avoir si reste de crédit
+        if reste_credit && reste_credit > 0
           Avoir.create!(
             client:    avoir_utilise.client,
-            vente_id:  @vente.id,
+            vente_id:     @vente.id,
             montant:   reste_credit,
             utilise:   false,
             date:      Date.today,
@@ -429,33 +425,15 @@ module Caisse
           )
         end
 
-        # ───────────────────────────────────────────────────────────────────────────
-        # 10) Fin: nettoyer la session et rediriger
-        # ───────────────────────────────────────────────────────────────────────────
+        # 11) Réinitialisation de la session et redirection
         session[:ventes] = {}
+
         redirect_to ventes_path, notice: "✅ Vente enregistrée avec succès."
       else
-        # ───────────────────────────────────────────────────────────────────────────
-        # Échec validations → réafficher la page "new" avec les bons jeux de données
-        # ───────────────────────────────────────────────────────────────────────────
-        @vente.client = client
-        @total        = calculer_total_session
-
-        @avoir        = Avoir.find_by(id: params[:avoir_id]) if params[:avoir_id].present?
-        @total_net    = (@total - (@avoir&.montant || 0)).clamp(0, Float::INFINITY)
-
-        @avoirs_valides = Avoir.where(utilise: false)
-                               .where("created_at >= ?", 1.year.ago)
-                               .order(created_at: :desc)
-
-        ventes_data   = session[:ventes] || {}
-        @quantites    = ventes_data.transform_keys(&:to_i).transform_values { |v| v["quantite"].to_i }
-        @produits     = Produit.where(id: @quantites.keys).index_by(&:id)
-
-        flash.now[:alert] = @vente.errors.full_messages.join("<br>").html_safe
-        render :new, status: :unprocessable_entity
+        redirect_to new_vente_path, alert: "❌ Erreur lors de l'enregistrement de la vente."
       end
     end
+
 
     def verifier_avoir
       @avoir = Avoir.find_by(id: params[:avoir_id])
