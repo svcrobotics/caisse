@@ -3,7 +3,6 @@ module Caisse
     before_action :set_vente, only: %i[show destroy imprimer_ticket]
 
     def index
-      @ventes = Caisse::Vente.includes(:client).order(created_at: :desc).limit(50)
       @ventes = Caisse::Vente.includes(ventes_produits: :produit).order(date_vente: :desc)
 
       if params[:numero].present?
@@ -37,7 +36,6 @@ module Caisse
     end
 
     def show
-      @vente = Caisse::Vente.find(params[:id])
       @avoir_utilise = Avoir.find_by(vente_id: @vente.id, utilise: true)
       @avoir_emis    = Avoir.find_by(vente_id: @vente.id, utilise: false)
 
@@ -83,7 +81,7 @@ module Caisse
           }
           session[:ventes][id]["quantite"] += 1
 
-          redirect_to new_vente_path(client_nom: params[:client_nom], avoir_id: params[:avoir_id]) and return
+          redirect_to new_vente_path(client_nom: params[:client_nom], client_id:  params[:client_id], avoir_id: params[:avoir_id]) and return
         else
           flash[:alert] = "Produit introuvable avec le code-barres : #{params[:code_barre]}"
         end
@@ -211,8 +209,10 @@ module Caisse
         end
       end
 
-      @produits = Produit.find(session[:ventes].keys).index_by(&:id)
-      @quantites = session[:ventes].transform_keys(&:to_i)
+      @produits  = Produit.where(id: session[:ventes].keys).index_by(&:id)
+      @quantites = session[:ventes]
+        .transform_keys(&:to_i)
+        .transform_values { |v| v["quantite"].to_i }
 
       respond_to do |format|
         format.turbo_stream
@@ -224,8 +224,10 @@ module Caisse
 
     def retirer_produit
       session[:ventes]&.delete(params[:produit_id].to_s)
-      @produits = Produit.find(session[:ventes].keys).index_by(&:id)
-      @quantites = session[:ventes].transform_keys(&:to_i)
+      @produits  = Produit.where(id: session[:ventes].keys).index_by(&:id)
+      @quantites = session[:ventes]
+        .transform_keys(&:to_i)
+        .transform_values { |v| v["quantite"].to_i }
 
       respond_to do |format|
         format.turbo_stream { render "recherche_produit" }
@@ -474,7 +476,6 @@ module Caisse
     end
 
     def imprimer_ticket
-      vente = Caisse::Vente.find(params[:id])
       imprimer_ticket_texte(vente)
       redirect_to ventes_path, notice: "Ticket imprimé avec succès."
     end
@@ -944,8 +945,6 @@ module Caisse
     end
 
     def imprimer_ticket_texte(vente)
-      vente = Caisse::Vente.find(params[:id])
-
       file_to_print = encode_with_iconv(generer_ticket_texte(vente))
       system("lp", "-d", "SEWOO_LKT_Series", file_to_print.to_s)
     end
