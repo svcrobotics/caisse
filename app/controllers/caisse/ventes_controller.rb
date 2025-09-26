@@ -51,8 +51,7 @@ module Caisse
 
     def new
       @vente = Caisse::Vente.new
-      @vente.client = Client.find_by(nom: params[:client_nom]) if params[:client_nom].present?
-
+      @vente.client = lookup_client_from_params
       @vente.cb     = params[:cb].to_d if params[:cb].present?
       @vente.espece = params[:espece].to_d if params[:espece].present?
       @vente.cheque = params[:cheque].to_d if params[:cheque].present?
@@ -217,7 +216,9 @@ module Caisse
 
       respond_to do |format|
         format.turbo_stream
-        format.html { redirect_to new_vente_path }
+        format.html { redirect_to new_vente_path(client_nom: params[:client_nom],
+                                         client_id: params[:client_id],
+                                         avoir_id:  params[:avoir_id]) }
       end
     end
 
@@ -228,7 +229,9 @@ module Caisse
 
       respond_to do |format|
         format.turbo_stream { render "recherche_produit" }
-        format.html { redirect_to new_vente_path }
+        format.html { redirect_to new_vente_path(client_nom: params[:client_nom],
+                                         client_id: params[:client_id],
+                                         avoir_id:  params[:avoir_id]) }
       end
     end
 
@@ -255,7 +258,9 @@ module Caisse
 
       respond_to do |format|
         format.turbo_stream { render "recherche_produit" }
-        format.html { redirect_to new_vente_path }
+        format.html { redirect_to new_vente_path(client_nom: params[:client_nom],
+                                         client_id: params[:client_id],
+                                         avoir_id:  params[:avoir_id]) }
       end
     end
 
@@ -685,6 +690,10 @@ module Caisse
     private
 
     def lookup_client_from_params
+      if params[:client_id].present?
+        return Client.find_by(id: params[:client_id])
+      end
+
       raw = params[:client_nom].to_s.strip
       return nil if raw.blank? || params[:sans_client] == "1"
 

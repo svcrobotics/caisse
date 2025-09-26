@@ -3,11 +3,15 @@
 
   <!-- 🔍 Scan code-barres (Enter autorisé) -->
   <%= form_with url: recherche_produit_ventes_path, method: :post, local: true do |f| %>
+    <%= hidden_field_tag :client_nom, params[:client_nom], id: "scan_client_nom" %>
+    <%= hidden_field_tag :client_id,  params[:client_id],  id: "scan_client_id"  %>
+    <%= hidden_field_tag :avoir_id,   params[:avoir_id],   id: "scan_avoir_id"   %>
+
     <div class="mb-6">
       <%= f.label :code_barre, class: "block font-medium text-gray-700 mb-1" do %>
         <span class="inline-flex items-center gap-2">
           <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 4v16m3-16v16m3-16v16m3-16v16m3-16v16m3-16v16m3-16v16" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 4v16m3-16v16m3-16v16m3-16v16m3-16v16m3-16v16" />
           </svg>
           Code-barres
         </span>
@@ -19,7 +23,9 @@
 
   <!-- 💳 Avoir (Enter autorisé via onchange submit) -->
   <%= form_with url: new_vente_path, method: :get, local: true do %>
-    <%= hidden_field_tag :client_nom, params[:client_nom] %>
+    <%= hidden_field_tag :client_nom, params[:client_nom], id: "avoir_client_nom" %>
+    <%= hidden_field_tag :client_id,  params[:client_id],  id: "avoir_client_id"  %>
+
     <div class="mb-6">
       <label for="avoir_id" class="block font-medium text-gray-700 mb-1">
         <span class="inline-flex items-center gap-2">
@@ -30,11 +36,11 @@
         </span>
       </label>
       <%= select_tag :avoir_id,
-          options_for_select([["-- Aucun avoir --", ""]] + @avoirs_valides.map { |a|
-            ["N°#{a.id.to_s.rjust(6, "0")} — #{number_to_currency(a.montant)} — #{l(a.created_at.to_date)}", a.id]
-          }, selected: params[:avoir_id]),
-          class: "w-full p-2 border border-gray-400 rounded-lg bg-gray-50",
-          onchange: "this.form.submit();" %>
+            options_for_select([["-- Aucun avoir --", ""]] + @avoirs_valides.map { |a|
+              ["N°#{a.id.to_s.rjust(6, "0")} — #{number_to_currency(a.montant)} — #{l(a.created_at.to_date)}", a.id]
+            }, selected: params[:avoir_id]),
+            class: "w-full p-2 border border-gray-400 rounded-lg bg-gray-50",
+            onchange: "this.form.submit();" %>
     </div>
   <% end %>
 
@@ -57,7 +63,7 @@
           <% quantite = @quantites[id] %>
           <% valeur = session[:ventes][produit.id.to_s] rescue {} %>
           <% remise = valeur.is_a?(Hash) ? valeur["remise"].to_d : 0.to_d %>
-          <% prix_unitaire = if produit.en_promo? && produit.prix_promo.present?; produit.prix_promo else produit.prix end %>
+          <% prix_unitaire = (produit.en_promo? && produit.prix_promo.present?) ? produit.prix_promo : produit.prix %>
           <% total_produit = (prix_unitaire * quantite * (1 - remise / 100)).round(2) %>
           <% total += total_produit %>
 
@@ -70,9 +76,7 @@
                   <span class="inline-block"><%= number_to_currency(produit.prix) %></span>
                   <span style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background-color: red; transform: rotate(-15deg); transform-origin: left center;"></span>
                 </span>
-                <span class="ml-2 text-red-600 font-bold text-xl">
-                  <%= number_to_currency(produit.prix_promo) %>
-                </span>
+                <span class="ml-2 text-red-600 font-bold text-xl"><%= number_to_currency(produit.prix_promo) %></span>
               <% else %>
                 <%= number_to_currency(produit.prix) %>
               <% end %>
@@ -136,8 +140,10 @@
 
   <!-- 💰 Paiement -->
   <%= form_with url: ventes_path, method: :post, local: true, html: { id: "encaissement-form" } do %>
-    <!-- hidden: reste (mis à jour par JS pour le guard Enter) -->
+    <!-- Hidden: gardés à jour par JS -->
     <%= hidden_field_tag :reste_value, nil, id: "reste_value" %>
+    <%= hidden_field_tag :avoir_id, params[:avoir_id] %>
+    <%= hidden_field_tag :remise_globale_manuel, nil, id: "hidden_remise_globale_manuel" %>
 
     <div class="mb-4">
       <label class="block font-medium text-gray-700 mb-1">Client</label>
@@ -145,20 +151,51 @@
         <%= text_field_tag :client_nom, params[:client_nom], list: "clients_list",
               class: "flex-1 rounded border border-gray-300 shadow-sm px-2 py-1",
               placeholder: "Nom du client (ou vide pour sans client)" %>
+
+        <!-- 👇 l’ID du client réel (unique dans ce form) -->
+        <%= hidden_field_tag :client_id, params[:client_id], id: "client_id" %>
+
         <%= link_to "➕ Nouveau client", main_app.new_client_path(retour: "ventes"),
               data: { turbo_frame: "client_form" },
               class: "whitespace-nowrap px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" %>
       </div>
 
       <datalist id="clients_list">
-        <% Client.order(:nom).pluck(:nom).uniq.each do |nom| %>
-          <option value="<%= nom %>">
+        <% Client.order(:nom).pluck(:nom, :id).each do |nom, id| %>
+          <option value="<%= nom %>" data-id="<%= id %>"></option>
         <% end %>
       </datalist>
     </div>
 
-    <%= hidden_field_tag :avoir_id, params[:avoir_id] %>
-    <%= hidden_field_tag :remise_globale_manuel, nil, id: "hidden_remise_globale_manuel" %>
+    <!-- JS: associe l’ID du client au nom saisi (scopé au grand form) -->
+    <script>
+      (function() {
+        const form   = document.getElementById('encaissement-form');
+        if (!form) return;
+
+        const input  = form.querySelector('input[name="client_nom"]');
+        const hidden = form.querySelector('#client_id');
+        const list   = document.getElementById('clients_list');
+        if (!input || !hidden || !list) return;
+
+        function setIdFromValue() {
+          const v = (input.value || '').trim().toLowerCase();
+          let id = '';
+          const options = list.querySelectorAll('option');
+          for (const opt of options) {
+            if ((opt.value || '').trim().toLowerCase() === v) {
+              id = opt.dataset.id || '';
+              break;
+            }
+          }
+          hidden.value = id; // vide si pas de correspondance exacte
+        }
+
+        input.addEventListener('input',  setIdFromValue);
+        input.addEventListener('change', setIdFromValue);
+        input.addEventListener('blur',   setIdFromValue);
+      })();
+    </script>
 
     <div class="mb-6">
       <label class="block text-lg font-semibold text-gray-800 mb-3">💳 Modes de paiement</label>
@@ -223,7 +260,7 @@
         const hiddenRemise = document.getElementById("hidden_remise_globale_manuel");
         if (hiddenRemise) hiddenRemise.value = remiseGlobale;
 
-        // 3) tenir compte d’un avoir choisi (⚠️ scope unique)
+        // 3) tenir compte d’un avoir choisi
         let totalApresAvoir = totalNet;
         <% if params[:avoir_id].present? && (avoir = Avoir.find_by(id: params[:avoir_id])) %>
           totalApresAvoir = Math.max(totalNet - <%= avoir.montant %>, 0);
@@ -289,7 +326,7 @@
       var btn  = document.getElementById("encaisser-btn");
       if (!form) return;
 
-      // Clic explicite → toujours autorisé (passe par les validations serveur)
+      // Clic explicite → toujours autorisé (passe par validations serveur)
       if (btn) {
         btn.addEventListener("click", function() {
           submitByButton = true;
