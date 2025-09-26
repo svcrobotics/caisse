@@ -37,7 +37,7 @@ module Caisse
 
     def show
       @avoir_utilise = Avoir.find_by(vente_id: @vente.id, utilise: true)
-      @avoir_emis    = Avoir.where(vente_id: @vente.id, utilise: false)
+      @avoir_emis    = Avoir.find_by(vente_id: @vente.id, utilise: false)
 
       # Calcul du reste à payer après utilisation de l'avoir (à titre indicatif)
       @reste = @vente.total_net - (@avoir_utilise&.montant.to_d || 0)
