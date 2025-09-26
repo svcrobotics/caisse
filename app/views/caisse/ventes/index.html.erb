@@ -84,7 +84,6 @@
               <% paiements << content_tag(:span, "AMEX: #{number_to_currency(vente.amex)}", class: "px-2 py-1 border rounded bg-purple-50 font-semibold text-purple-700") if vente.amex.to_f > 0 %>
 
               <span class="flex items-center gap-1">
-                Paiement :
                 <%= safe_join(paiements, " ".html_safe) %>
               </span>
 
