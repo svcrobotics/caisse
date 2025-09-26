@@ -572,7 +572,7 @@ module Caisse
 
             # Gestion des avoirs
             avoir_utilise = Avoir.find_by(vente_id: vente.id, utilise: true)
-            avoir_emis = Avoir.where(vente_id: vente.id, utilise: false)
+            avoir_emis = Avoir.find_by(vente_id: vente.id, utilise: false)
 
             sheet.add_row [
               vente.date_vente.strftime("%Y-%m-%d"),
