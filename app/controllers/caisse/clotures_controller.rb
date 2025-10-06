@@ -1068,9 +1068,10 @@ module Caisse
       lignes  = []
 
       # En-tête
-      lignes << "VINTAGE ROYAN".center(largeur)
-      lignes << "3bis rue Notre-Dame".center(largeur)
-      lignes << "17200 Royan".center(largeur)
+      lignes << "ROMANCE".center(largeur)
+      lignes << "C.C. Val Lumière".center(largeur)
+      lignes << "5 Rue Jacques Yves Cousteau".center(largeur)
+      lignes << "17640 Vaux-sur-Mer".center(largeur)
       lignes << "SIRET : 832 259 837 00031".center(largeur)
       titre = data.categorie == "mensuelle" ? "Clôture mensuelle" : "Clôture de caisse Z"
       lignes << titre.center(largeur)

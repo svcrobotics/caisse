@@ -749,8 +749,9 @@ module Caisse
 
       # 🏷️ En-tête boutique
       lignes << "ROMANCE".center(largeur)
-      lignes << "".center(largeur)
-      lignes << "17".center(largeur)
+      lignes << "C.C. Val Lumière".center(largeur)
+      lignes << "5 Rue Jacques Yves Cousteau".center(largeur)
+      lignes << "17640 Vaux-sur-Mer".center(largeur)
       lignes << "Tel: ".center(largeur)
       lignes << "-" * largeur
       lignes << "*** VENTE ***".center(largeur)
