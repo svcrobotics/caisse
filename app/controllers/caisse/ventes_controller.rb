@@ -936,7 +936,7 @@ module Caisse
       lignes << ""
       lignes << "Merci de votre visite".center(largeur)
       lignes << "A bientôt".center(largeur)
-      lignes << "VINTAGE ROYAN".center(largeur)
+      lignes << "ROMANCE".center(largeur)
       lignes << "\n" * 10
 
       lignes.join("\n")
