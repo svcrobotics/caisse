@@ -928,11 +928,15 @@ module Caisse
       lignes << format("%-10s%-10s%-10s%-10s", "TOTAL", "#{sprintf('%.2f €', tva_total)}", "#{sprintf('%.2f €', ht_total)}", "#{sprintf('%.2f €', ttc_total)}")
 
       lignes << ""
-      lignes << "Horaires d'ouverture".center(largeur)
-      lignes << "Lundi       14h30 - 19h00".center(largeur)
-      lignes << "Mar -> Sam  10h00 - 19h00".center(largeur)
-      lignes << "Dimanche    10h00 - 13h00".center(largeur)
-
+      lignes << "Horaires".center(largeur)
+      lignes << "Lundi au Samedi 8h30 - 19h30".center(largeur)
+      lignes << "Dimanche        8h30 - 12h30".center(largeur)
+      lignes << ""
+      lignes << "Ouvertures exceptionnelles:".center(largeur)
+      lignes << "1 novembre et 11 novembre".center(largeur)
+      lignes << ""
+      lignes << "Fermeture exceptionnelle:".center(largeur)
+      lignes << "25 décembre".center(largeur)
       lignes << ""
       lignes << "Merci de votre visite".center(largeur)
       lignes << "A bientôt".center(largeur)
