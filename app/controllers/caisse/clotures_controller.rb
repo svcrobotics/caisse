@@ -46,16 +46,22 @@ module Caisse
       @articles_count = ventes.sum { |v| v.ventes_produits.sum(&:quantite) }
 
       # Totaux par mode de paiement (une seule fois par vente)
-      #@total_cb      = ventes.sum(:cb).to_d
-      @total_cb = Caisse::Vente.where(id: ventes.ids).sum(:cb).to_d
-      @total_amex    = ventes.sum(:amex).to_d
+      # @total_cb      = ventes.sum(:cb).to_d
+      # @total_amex    = ventes.sum(:amex).to_d
       @total_especes = ventes.sum do |v|
         e      = v.espece.to_d
         autres = v.cb.to_d + v.cheque.to_d + v.amex.to_d
         rendu  = [e - (v.total_net.to_d - autres), 0].max
         (e - rendu).round(2)
       end.round(2)
-      @total_cheque  = ventes.sum(:cheque).to_d
+      # @total_cheque  = ventes.sum(:cheque).to_d
+
+      base = Caisse::Vente.where(id: ventes.select(:id)) # retire l'effet du includes/join
+
+      total_cb     = base.sum(:cb).to_d
+      total_amex   = base.sum(:amex).to_d
+      total_cheque = base.sum(:cheque).to_d
+
 
       # Calcul des remises et ventilation TVA
       @ttc_0      = 0.to_d
@@ -186,10 +192,17 @@ module Caisse
 
 
       # Montants par mode de paiement (uniquement sur les ventes non annulées)
-      total_cb      = ventes_du_mois.sum(:cb).to_d
-      total_amex    = ventes_du_mois.sum(:amex).to_d
+      # total_cb      = ventes_du_mois.sum(:cb).to_d
+      # total_amex    = ventes_du_mois.sum(:amex).to_d
       total_especes = ventes_du_mois.sum(:espece).to_d
-      total_cheque  = ventes_du_mois.sum(:cheque).to_d
+      # total_cheque  = ventes_du_mois.sum(:cheque).to_d
+
+      base = Caisse::Vente.where(id: ventes.select(:id)) # retire l'effet du includes/join
+
+      total_cb     = base.sum(:cb).to_d
+      total_amex   = base.sum(:amex).to_d
+      total_cheque = base.sum(:cheque).to_d
+
 
       # Nombre total d'articles vendus
       total_articles = ventes_du_mois.sum { |v| v.ventes_produits.sum(&:quantite) }
@@ -351,9 +364,16 @@ module Caisse
                  .includes(:client, ventes_produits: :produit)
                  .where(date_vente: jour.all_day, annulee: [false, nil])
 
-      total_cb      = ventes.sum(:cb).to_d
-      total_amex    = ventes.sum(:amex).to_d
-      total_cheque  = ventes.sum(:cheque).to_d
+      # total_cb      = ventes.sum(:cb).to_d
+      # total_amex    = ventes.sum(:amex).to_d
+      # total_cheque  = ventes.sum(:cheque).to_d
+
+      base = Caisse::Vente.where(id: ventes.select(:id)) # retire l'effet du includes/join
+
+      total_cb     = base.sum(:cb).to_d
+      total_amex   = base.sum(:amex).to_d
+      total_cheque = base.sum(:cheque).to_d
+
 
       total_especes = ventes.sum do |v|
         espece = v.espece.to_d
@@ -583,9 +603,16 @@ module Caisse
       total_articles = ventes.sum { |v| v.ventes_produits.sum(&:quantite) }
 
       # 7) Somme des paiements (une seule fois par vente)
-      total_cb      = ventes.sum(:cb).to_d
-      total_amex    = ventes.sum(:amex).to_d
-      total_cheque  = ventes.sum(:cheque).to_d
+      # total_cb      = ventes.sum(:cb).to_d
+      # total_amex    = ventes.sum(:amex).to_d
+      # total_cheque  = ventes.sum(:cheque).to_d
+
+      base = Caisse::Vente.where(id: ventes.select(:id)) # retire l'effet du includes/join
+
+      total_cb     = base.sum(:cb).to_d
+      total_amex   = base.sum(:amex).to_d
+      total_cheque = base.sum(:cheque).to_d
+
 
       # 8) Calcul espèces (en retranchant le rendu éventuel)
       total_especes = ventes.sum do |v|
@@ -854,9 +881,16 @@ module Caisse
       total_articles = ventes.sum { |v| v.ventes_produits.sum(&:quantite) }
 
       # 6) Somme des paiements (une seule fois par vente)
-      total_cb     = ventes.sum(:cb).to_d
-      total_amex   = ventes.sum(:amex).to_d
-      total_cheque = ventes.sum(:cheque).to_d
+      # total_cb     = ventes.sum(:cb).to_d
+      # total_amex   = ventes.sum(:amex).to_d
+      # total_cheque = ventes.sum(:cheque).to_d
+
+      base = Caisse::Vente.where(id: ventes.select(:id)) # retire l'effet du includes/join
+
+      total_cb     = base.sum(:cb).to_d
+      total_amex   = base.sum(:amex).to_d
+      total_cheque = base.sum(:cheque).to_d
+
 
       # 7) Calcul espèces (en retranchant le rendu éventuel par vente)
       total_especes = ventes.sum do |v|
