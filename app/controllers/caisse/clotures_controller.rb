@@ -46,7 +46,8 @@ module Caisse
       @articles_count = ventes.sum { |v| v.ventes_produits.sum(&:quantite) }
 
       # Totaux par mode de paiement (une seule fois par vente)
-      @total_cb      = ventes.sum(:cb).to_d
+      #@total_cb      = ventes.sum(:cb).to_d
+      @total_cb = Caisse::Vente.where(id: ventes.ids).sum(:cb).to_d
       @total_amex    = ventes.sum(:amex).to_d
       @total_especes = ventes.sum do |v|
         e      = v.espece.to_d
