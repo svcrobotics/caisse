@@ -197,7 +197,7 @@ module Caisse
       total_especes = ventes_du_mois.sum(:espece).to_d
       # total_cheque  = ventes_du_mois.sum(:cheque).to_d
 
-      base = Caisse::Vente.where(id: ventes.select(:id)) # retire l'effet du includes/join
+      base = Caisse::Vente.where(id: ventes_du_mois.select(:id))
 
       total_cb     = base.sum(:cb).to_d
       total_amex   = base.sum(:amex).to_d
