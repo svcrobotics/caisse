@@ -180,7 +180,7 @@ module Caisse
       })
 
       # 10) Fin
-      if params[:remboursement] == "avoir" && @vente.client.present?
+      if params[:remboursement] == "avoir"
         nouvel_avoir = Avoir.where(vente: @vente, utilise: false).order(:created_at).last
         redirect_to avoirs_path,
                     notice: "✅ Vente n°#{@vente.id} annulée. Avoir n°#{nouvel_avoir&.id} créé (#{sprintf('%.2f', nouvel_avoir&.montant.to_d)} €)."
