@@ -7,7 +7,7 @@ module Caisse
     belongs_to :client, optional: true
     belongs_to :versement, optional: true
 
-    has_one :avoir, dependent: :destroy
+    has_many :avoir, dependent: :destroy
 
     has_many :ventes_produits, class_name: "::VentesProduit", dependent: :destroy
     has_many :produits, through: :ventes_produits
