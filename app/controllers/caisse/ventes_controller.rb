@@ -179,16 +179,19 @@ module Caisse
         end
       })
 
-      # 10) Fin
+      # 10) 
       if mode_remboursement == "avoir"
         nouvel_avoir = Avoir.where(vente: @vente, utilise: false).order(:created_at).last
         if nouvel_avoir
-          redirect_to avoir_path(nouvel_avoir), notice: "✅ Vente n°#{@vente.id} annulée. Avoir n°#{nouvel_avoir.id} créé (#{sprintf('%.2f', nouvel_avoir.montant.to_d)} €)."
+          redirect_to avoir_path(nouvel_avoir.id),
+                      notice: "✅ Vente n°#{@vente.id} annulée. Avoir n°#{nouvel_avoir.id} créé (#{sprintf('%.2f', nouvel_avoir.montant.to_d)} €)."
         else
-          redirect_to "/avoirs", notice: "✅ Vente n°#{@vente.id} annulée. Avoir créé."
+          redirect_to "/avoirs",
+                      notice: "✅ Vente n°#{@vente.id} annulée. Avoir créé."
         end
       else
-        redirect_to ventes_path, notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
+        redirect_to ventes_path,
+                    notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
       end
 
     end
