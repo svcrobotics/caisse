@@ -151,7 +151,7 @@ module Caisse
       end
 
       # 8) Remboursement par avoir
-      if params[:remboursement] == "avoir" && @vente.client.present?
+      if params[:remboursement] == "avoir"
         Avoir.create!(
           client:    @vente.client,
           vente:     @vente,
