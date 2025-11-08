@@ -181,12 +181,12 @@ module Caisse
 
       # 10) Fin
       if params[:remboursement] == "avoir" && @vente.client.present?
-        # optionnel : récupérer l’ID du dernier avoir lié à la vente pour le flash
         nouvel_avoir = Avoir.where(vente: @vente, utilise: false).order(:created_at).last
-        msg = "✅ Vente n°#{@vente.id} annulée. Avoir n°#{nouvel_avoir&.id} créé (#{sprintf('%.2f', nouvel_avoir&.montant.to_d)} €)."
-        redirect_to avoirs_path, notice: msg
+        redirect_to avoirs_path,
+                    notice: "✅ Vente n°#{@vente.id} annulée. Avoir n°#{nouvel_avoir&.id} créé (#{sprintf('%.2f', nouvel_avoir&.montant.to_d)} €)."
       else
-        redirect_to ventes_path, notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
+        redirect_to ventes_path,
+                    notice: "✅ Vente n°#{@vente.id} annulée avec succès. Les produits ont été remis en stock."
       end
 
     end
