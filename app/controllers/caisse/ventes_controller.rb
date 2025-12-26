@@ -37,7 +37,7 @@ module Caisse
 
     def show
       @vente = Vente
-        .includes(lignes: { produit: :fournisseur })
+        .includes(ventes_produits: { produit: :fournisseur })
         .find(params[:id])
 
       @avoir_utilise = Avoir.find_by(vente_id: @vente.id, utilise: true)
