@@ -107,7 +107,21 @@ module Caisse
 
       # 3) Remettre les produits en stock
       @vente.ventes_produits.each do |vp|
+        # Remettre le stock total
         vp.produit.increment!(:stock, vp.quantite)
+
+        # Remettre le stock de la taille vendue
+        if vp.produit_taille.present?
+          vp.produit_taille.increment!(:stock, vp.quantite)
+        end
+      end
+
+      # Supprimer les interactions de vente liées à la vente annulée
+      @vente.ventes_produits.each do |vp|
+        ProduitInteraction.where(
+          ventes_produit_id: vp.id,
+          type_interaction: "vendu"
+        ).delete_all
       end
 
       # 4) Déterminer le mode de remboursement
@@ -196,80 +210,189 @@ module Caisse
 
     def recherche_produit
       code = correct_scanner_input(params[:code_barre])
-      produit = Produit.find_by(code_barre: code)
 
       session[:ventes] ||= {}
 
-      if produit
-        produit.update(stock: 1) if produit.stock <= 0
+      # --------------------------------------------------
+      # 1. Recherche d'abord une taille de chaussure
+      # --------------------------------------------------
 
-        id_str = produit.id.to_s
+      produit_taille = ProduitTaille.find_by(code_barre: code)
 
-        if session[:ventes][id_str].is_a?(Hash)
-          session[:ventes][id_str]["quantite"] += 1
+      if produit_taille
+        produit = produit_taille.produit
+
+        # Une ligne de panier doit être unique par taille.
+        #
+        # Exemple :
+        # produit 923 / taille 38
+        # produit 923 / taille 39
+        #
+        # doivent être deux lignes différentes.
+        panier_id = "taille_#{produit_taille.id}"
+
+        if session[:ventes][panier_id].is_a?(Hash)
+          session[:ventes][panier_id]["quantite"] += 1
         else
-          session[:ventes][id_str] = {
+          session[:ventes][panier_id] = {
+            "produit_id" => produit.id,
+            "produit_taille_id" => produit_taille.id,
+            "taille" => produit_taille.taille,
             "quantite" => 1,
-            "prix" => (produit.en_promo? && produit.prix_promo.present? ? produit.prix_promo : produit.prix).to_d,
+            "prix" => (
+              produit.en_promo? && produit.prix_promo.present? ?
+                produit.prix_promo :
+                produit.prix
+            ).to_d,
             "remise" => 0.to_d
           }
         end
+
+      else
+
+        # --------------------------------------------------
+        # 2. Ancien fonctionnement
+        #    vêtements / accessoires / anciens produits
+        # --------------------------------------------------
+
+        produit = Produit.find_by(code_barre: code)
+
+        if produit
+          produit.update(stock: 1) if produit.stock <= 0
+
+          panier_id = produit.id.to_s
+
+          if session[:ventes][panier_id].is_a?(Hash)
+            session[:ventes][panier_id]["quantite"] += 1
+          else
+            session[:ventes][panier_id] = {
+              "produit_id" => produit.id,
+              "produit_taille_id" => nil,
+              "quantite" => 1,
+              "prix" => (
+                produit.en_promo? && produit.prix_promo.present? ?
+                  produit.prix_promo :
+                  produit.prix
+              ).to_d,
+              "remise" => 0.to_d
+            }
+          end
+        end
       end
 
-      @produits  = Produit.where(id: session[:ventes].keys).index_by(&:id)
-      @quantites = session[:ventes]
-        .transform_keys(&:to_i)
-        .transform_values { |v| v["quantite"].to_i }
+      # --------------------------------------------------
+      # Préparation de l'affichage
+      # --------------------------------------------------
+
+      produit_ids = session[:ventes].values
+        .select { |infos| infos.is_a?(Hash) }
+        .map { |infos| infos["produit_id"] }
+        .compact
+        .uniq
+
+      @produits = Produit.where(id: produit_ids).index_by(&:id)
+
+      @quantites = session[:ventes].transform_values do |infos|
+        infos.is_a?(Hash) ? infos["quantite"].to_i : infos.to_i
+      end
 
       respond_to do |format|
         format.turbo_stream
-        format.html { redirect_to new_vente_path(client_nom: params[:client_nom],
-                                         client_id: params[:client_id],
-                                         avoir_id:  params[:avoir_id]) }
+
+        format.html do
+          redirect_to new_vente_path(
+            client_nom: params[:client_nom],
+            client_id: params[:client_id],
+            avoir_id: params[:avoir_id]
+          )
+        end
       end
     end
 
     def retirer_produit
-      session[:ventes]&.delete(params[:produit_id].to_s)
-      @produits  = Produit.where(id: session[:ventes].keys).index_by(&:id)
-      @quantites = session[:ventes]
-        .transform_keys(&:to_i)
-        .transform_values { |v| v["quantite"].to_i }
+      panier_id = params[:produit_id].to_s
+
+      session[:ventes] ||= {}
+      session[:ventes].delete(panier_id)
+
+      produit_ids = session[:ventes].values.filter_map do |infos|
+        next unless infos.is_a?(Hash)
+
+        infos["produit_id"]
+      end.uniq
+
+      @produits = Produit.where(id: produit_ids).index_by(&:id)
+
+      @quantites = session[:ventes].transform_values do |infos|
+        infos.is_a?(Hash) ? infos["quantite"].to_i : infos.to_i
+      end
 
       respond_to do |format|
         format.turbo_stream { render "recherche_produit" }
-        format.html { redirect_to new_vente_path(client_nom: params[:client_nom],
-                                         client_id: params[:client_id],
-                                         avoir_id:  params[:avoir_id]) }
+
+        format.html do
+          redirect_to new_vente_path(
+            client_nom: params[:client_nom],
+            client_id: params[:client_id],
+            avoir_id: params[:avoir_id]
+          )
+        end
       end
     end
 
     def modifier_remise
-      id = params[:produit_id].to_s
+      panier_id = params[:produit_id].to_s
       remise = params[:remise].to_d
 
       session[:ventes] ||= {}
 
-      # Sécurise le format
-      if session[:ventes][id].is_a?(Integer)
-        produit = Produit.find_by(id: id)
-        session[:ventes][id] = {
-          "quantite" => session[:ventes][id],
-          "prix" => produit&.prix.to_d || 0.to_d,
-          "remise" => 0.to_d
-        }
+      ligne = session[:ventes][panier_id]
+
+      unless ligne
+        redirect_to new_vente_path,
+                    alert: "Ligne de panier introuvable."
+        return
       end
 
-      session[:ventes][id]["remise"] = remise
+      # Compatibilité ancien format éventuel
+      if ligne.is_a?(Integer)
+        produit = Produit.find_by(id: panier_id)
 
-      @produits = Produit.find(session[:ventes].keys).index_by(&:id)
-      @quantites = session[:ventes].transform_keys(&:to_i).transform_values { |v| v["quantite"] }
+        ligne = {
+          "produit_id" => produit&.id,
+          "produit_taille_id" => nil,
+          "quantite" => ligne,
+          "prix" => produit&.prix_affiche.to_d,
+          "remise" => 0.to_d
+        }
+
+        session[:ventes][panier_id] = ligne
+      end
+
+      ligne["remise"] = remise
+
+      produit_ids = session[:ventes].values.filter_map do |infos|
+        next unless infos.is_a?(Hash)
+
+        infos["produit_id"]
+      end.uniq
+
+      @produits = Produit.where(id: produit_ids).index_by(&:id)
+
+      @quantites = session[:ventes].transform_values do |infos|
+        infos.is_a?(Hash) ? infos["quantite"].to_i : infos.to_i
+      end
 
       respond_to do |format|
         format.turbo_stream { render "recherche_produit" }
-        format.html { redirect_to new_vente_path(client_nom: params[:client_nom],
-                                         client_id: params[:client_id],
-                                         avoir_id:  params[:avoir_id]) }
+
+        format.html do
+          redirect_to new_vente_path(
+            client_nom: params[:client_nom],
+            client_id: params[:client_id],
+            avoir_id: params[:avoir_id]
+          )
+        end
       end
     end
 
@@ -290,17 +413,50 @@ module Caisse
       total_net_lignes = 0.to_d
       lignes         = []
 
-      ventes_data.each do |produit_id_str, infos|
-        produit    = Produit.find(produit_id_str)
+      ventes_data.each do |panier_id, infos|
+        next unless infos.is_a?(Hash)
+
+        produit_id = infos["produit_id"]
+
+        # Compatibilité avec l'ancien panier
+        produit_id ||= panier_id if panier_id.to_s.match?(/\A\d+\z/)
+
+        produit = Produit.find(produit_id)
+
+        produit_taille =
+          if infos["produit_taille_id"].present?
+            ProduitTaille.find(infos["produit_taille_id"])
+          end
+
         qte        = infos["quantite"].to_i
         pu         = infos["prix"].to_d
-        remise_pct = infos["remise"].to_d # remise par ligne en %
+        remise_pct = infos["remise"].to_d
 
-        montant_brut   = pu * qte
-        remise_euros   = (montant_brut * (remise_pct / 100)).round(2)
-        montant_net    = (montant_brut - remise_euros).round(2)
+        # Sécurité stock pour les chaussures
+        if produit_taille.present? && produit_taille.stock.to_i < qte
+          redirect_to new_vente_path,
+                      alert: "Stock insuffisant pour #{produit.nom} taille #{produit_taille.taille}."
+          return
+        end
 
-        lignes << { produit: produit, quantite: qte, prix_unitaire: pu, remise: remise_pct }
+        # Sécurité stock pour les autres produits
+        if produit_taille.nil? && produit.stock.to_i < qte
+          redirect_to new_vente_path,
+                      alert: "Stock insuffisant pour #{produit.nom}."
+          return
+        end
+
+        montant_brut = pu * qte
+        remise_euros = (montant_brut * (remise_pct / 100)).round(2)
+        montant_net  = (montant_brut - remise_euros).round(2)
+
+        lignes << {
+          produit: produit,
+          produit_taille: produit_taille,
+          quantite: qte,
+          prix_unitaire: pu,
+          remise: remise_pct
+        }
 
         total_brut       += montant_brut
         total_net_lignes += montant_net
@@ -392,7 +548,38 @@ module Caisse
         # 7) Stock: décrémenter
         # ───────────────────────────────────────────────────────────────────────────
         @vente.ventes_produits.each do |vp|
+          # Stock total du produit
           vp.produit.decrement!(:stock, vp.quantite)
+
+          # Stock de la taille pour les chaussures
+          if vp.produit_taille.present?
+            vp.produit_taille.decrement!(:stock, vp.quantite)
+          end
+        end
+
+        # --------------------------------------------------
+        # Enregistrer les ventes pour l'analyse IA boutique
+        # --------------------------------------------------
+
+        @vente.ventes_produits.each do |vp|
+          prix_reference = vp.produit.prix.to_d
+
+          prix_apres_remise =
+            (
+              vp.prix_unitaire.to_d *
+              (1 - vp.remise.to_d / 100)
+            ).round(2)
+
+          ProduitInteraction.create!(
+            produit: vp.produit,
+            produit_taille: vp.produit_taille,
+            ventes_produit: vp,
+            type_interaction: "vendu",
+            quantite: vp.quantite,
+            prix_reference: prix_reference,
+            prix_vendu: prix_apres_remise,
+            remise_pct: vp.remise.to_d
+          )
         end
 
         # ───────────────────────────────────────────────────────────────────────────

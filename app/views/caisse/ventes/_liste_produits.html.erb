@@ -2,50 +2,91 @@
   <thead class="bg-gray-200 text-gray-700">
     <tr>
       <th class="px-3 py-2">Nom</th>
+      <th class="px-3 py-2">Taille</th>
       <th class="px-3 py-2">Code-barres</th>
       <th class="px-3 py-2">Prix unitaire</th>
       <th class="px-3 py-2">Quantité</th>
       <th class="px-3 py-2">Total</th>
+      <th class="px-3 py-2"></th>
     </tr>
   </thead>
+
   <tbody>
-    <% produits.each do |id, produit| %>
-      <% next if produit.nil? %>
-      <% qte = quantites[id] || 1 %>
+    <% session[:ventes].each do |panier_id, infos| %>
+      <% next unless infos.is_a?(Hash) %>
+
+      <% produit = Produit.find_by(id: infos["produit_id"]) %>
+      <% next unless produit %>
+
+      <% produit_taille =
+           infos["produit_taille_id"].present? ?
+             ProduitTaille.find_by(id: infos["produit_taille_id"]) :
+             nil %>
+
+      <% qte = infos["quantite"].to_i %>
+      <% prix = infos["prix"].to_d %>
+
       <tr class="border-b">
-        <td class="px-3 py-2"><%= produit.nom %></td>
-        <td class="px-3 py-2"><%= produit.code_barre %></td>
-        <td class="px-3 py-2"><%= number_to_currency(produit.prix_affiche) %></td>
+
         <td class="px-3 py-2">
-          <%= form_with url: modifier_quantite_ventes_path, method: :post,
-                data: { turbo_frame: "resultat_produits" }, class: "inline-block" do |f| %>
-            <%= hidden_field_tag :produit_id, produit.id %>
-            <%= number_field_tag :quantite, qte, min: 1, max: produit.stock,
-            class: "w-16 border rounded px-1 py-0.5 text-center",
-              onchange: "this.form.submit()" %>
-          <% end %>
+          <%= produit.nom %>
         </td>
-        <td class="px-3 py-2 text-right"><%= number_to_currency(produit.prix_affiche * qte) %></td>
+
+        <td class="px-3 py-2">
+          <%= produit_taille&.taille || produit.taille.presence || "—" %>
+        </td>
+
+        <td class="px-3 py-2">
+          <%= produit_taille&.code_barre || produit.code_barre %>
+        </td>
+
+        <td class="px-3 py-2">
+          <%= number_to_currency(prix) %>
+        </td>
+
+        <td class="px-3 py-2">
+          <%= qte %>
+        </td>
+
+        <td class="px-3 py-2 text-right">
+          <%= number_to_currency(prix * qte) %>
+        </td>
+
         <td class="px-3 py-2 text-center">
-          <%= form_with url: retirer_produit_ventes_path, method: :post,
-                data: { turbo_frame: "resultat_produits" }, class: "inline-block" do |f| %>
-            <%= hidden_field_tag :produit_id, produit.id %>
-            <%= submit_tag "🗑", class: "text-red-600 hover:underline text-sm" %>
+          <%= form_with url: retirer_produit_ventes_path,
+                method: :post,
+                data: { turbo_frame: "resultat_produits" },
+                class: "inline-block" do |f| %>
+
+            <%= hidden_field_tag :produit_id, panier_id %>
+
+            <%= submit_tag "🗑",
+                  class: "text-red-600 hover:underline text-sm" %>
           <% end %>
         </td>
+
       </tr>
     <% end %>
   </tbody>
+
   <tfoot class="bg-gray-100 font-semibold">
     <tr>
-      <td colspan="4" class="text-right px-3 py-2">Total :</td>
+      <td colspan="5" class="text-right px-3 py-2">
+        Total :
+      </td>
+
       <td class="text-right px-3 py-2">
         <%= number_to_currency(
-              produits.sum { |id, produit| (quantites[id] || 1) * produit.prix }
+              session[:ventes].values.sum do |infos|
+                next 0 unless infos.is_a?(Hash)
+
+                infos["prix"].to_d * infos["quantite"].to_i
+              end
             ) %>
       </td>
+
+      <td></td>
     </tr>
   </tfoot>
 </table>
-
 

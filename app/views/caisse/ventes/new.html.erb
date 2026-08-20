@@ -1,368 +1,1368 @@
 <div class="max-w-3xl mx-auto bg-white shadow rounded p-6">
   <h1 class="text-2xl font-semibold mb-6">🛒 Encaissement</h1>
 
-  <!-- 🔍 Scan code-barres (Enter autorisé) -->
-  <%= form_with url: recherche_produit_ventes_path, method: :post, local: true do |f| %>
-    <%= hidden_field_tag :client_nom, params[:client_nom], id: "scan_client_nom" %>
-    <%= hidden_field_tag :client_id,  params[:client_id],  id: "scan_client_id"  %>
-    <%= hidden_field_tag :avoir_id,   params[:avoir_id],   id: "scan_avoir_id"   %>
+  <!-- ================================================== -->
+  <!-- 🔍 CODE-BARRES -->
+  <!-- ================================================== -->
+
+  <%= form_with url: recherche_produit_ventes_path,
+        method: :post,
+        local: true do |f| %>
+
+    <%= hidden_field_tag :client_nom,
+          params[:client_nom],
+          id: "scan_client_nom" %>
+
+    <%= hidden_field_tag :client_id,
+          params[:client_id],
+          id: "scan_client_id" %>
+
+    <%= hidden_field_tag :avoir_id,
+          params[:avoir_id],
+          id: "scan_avoir_id" %>
 
     <div class="mb-6">
-      <%= f.label :code_barre, class: "block font-medium text-gray-700 mb-1" do %>
+      <%= f.label :code_barre,
+            class: "block font-medium text-gray-700 mb-1" do %>
+
         <span class="inline-flex items-center gap-2">
-          <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 4v16m3-16v16m3-16v16m3-16v16m3-16v16m3-16v16" />
+          <svg
+            class="w-5 h-5 text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3 4v16m3-16v16m3-16v16m3-16v16m3-16v16m3-16v16"
+            />
           </svg>
+
           Code-barres
         </span>
+
       <% end %>
-      <%= f.text_field :code_barre, autofocus: true, autocomplete: "off",
-            class: "w-full p-2 border border-gray-400 rounded-lg bg-gray-50" %>
+
+      <%= f.text_field :code_barre,
+            autofocus: true,
+            autocomplete: "off",
+            class: "w-full p-2 border border-gray-400 rounded-lg bg-gray-50",
+            placeholder: "Scannez ou tapez le code-barres puis Entrée" %>
     </div>
+
   <% end %>
 
-  <!-- 💳 Avoir (Enter autorisé via onchange submit) -->
-  <%= form_with url: new_vente_path, method: :get, local: true do %>
-    <%= hidden_field_tag :client_nom, params[:client_nom], id: "avoir_client_nom" %>
-    <%= hidden_field_tag :client_id,  params[:client_id],  id: "avoir_client_id"  %>
+
+  <!-- ================================================== -->
+  <!-- 💳 AVOIR -->
+  <!-- ================================================== -->
+
+  <%= form_with url: new_vente_path,
+        method: :get,
+        local: true do %>
+
+    <%= hidden_field_tag :client_nom,
+          params[:client_nom],
+          id: "avoir_client_nom" %>
+
+    <%= hidden_field_tag :client_id,
+          params[:client_id],
+          id: "avoir_client_id" %>
 
     <div class="mb-6">
-      <label for="avoir_id" class="block font-medium text-gray-700 mb-1">
+
+      <label
+        for="avoir_id"
+        class="block font-medium text-gray-700 mb-1"
+      >
         <span class="inline-flex items-center gap-2">
-          <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 11h16M4 15h16M4 19h16" />
+
+          <svg
+            class="w-5 h-5 text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 7h16M4 11h16M4 15h16M4 19h16"
+            />
           </svg>
+
           Avoir à utiliser
+
         </span>
       </label>
+
       <%= select_tag :avoir_id,
-            options_for_select([["-- Aucun avoir --", ""]] + @avoirs_valides.map { |a|
-              ["N°#{a.id.to_s.rjust(6, "0")} — #{number_to_currency(a.montant)} — #{l(a.created_at.to_date)}", a.id]
-            }, selected: params[:avoir_id]),
+            options_for_select(
+              [["-- Aucun avoir --", ""]] +
+              @avoirs_valides.map { |a|
+                [
+                  "N°#{a.id.to_s.rjust(6, "0")} — #{number_to_currency(a.montant)} — #{l(a.created_at.to_date)}",
+                  a.id
+                ]
+              },
+              selected: params[:avoir_id]
+            ),
             class: "w-full p-2 border border-gray-400 rounded-lg bg-gray-50",
             onchange: "this.form.submit();" %>
+
     </div>
+
   <% end %>
 
-  <% total = 0 %>
-  <% if @produits.any? %>
+
+  <!-- ================================================== -->
+  <!-- 🛍️ PANIER -->
+  <!-- ================================================== -->
+
+  <% total = 0.to_d %>
+
+  <% if session[:ventes].present? %>
+
     <table class="table-auto w-full mb-6 border">
+
       <thead>
         <tr class="bg-gray-100 text-sm text-gray-700 uppercase">
-          <th class="px-4 py-2 text-left w-2/5">Produit</th>
-          <th class="px-2 py-2 text-center w-1/12">Qté</th>
-          <th class="px-2 py-2 text-center w-1/6">Prix</th>
-          <th class="px-2 py-2 text-center w-1/6">Remise</th>
-          <th class="px-2 py-2 text-center w-1/6">Total</th>
-          <th class="px-2 py-2 text-center w-1/6">Stock</th>
-          <th class="px-2 py-2 text-center w-1/6">Actions</th>
+
+          <th class="px-3 py-2 text-left">
+            Produit
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Taille
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Qté
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Prix
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Remise
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Total
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Stock
+          </th>
+
+          <th class="px-2 py-2 text-center">
+            Actions
+          </th>
+
         </tr>
       </thead>
+
+
       <tbody>
-        <% @produits.each do |id, produit| %>
-          <% quantite = @quantites[id] %>
-          <% valeur = session[:ventes][produit.id.to_s] rescue {} %>
-          <% remise = valeur.is_a?(Hash) ? valeur["remise"].to_d : 0.to_d %>
-          <% prix_unitaire = (produit.en_promo? && produit.prix_promo.present?) ? produit.prix_promo : produit.prix %>
-          <% total_produit = (prix_unitaire * quantite * (1 - remise / 100)).round(2) %>
+
+        <% session[:ventes].each do |panier_id, valeur_originale| %>
+
+          <!--
+            Compatibilité ancien format session :
+            produit_id => quantité entière
+
+            Nouveau format :
+            panier_id => {
+              produit_id,
+              produit_taille_id,
+              taille,
+              quantite,
+              prix,
+              remise
+            }
+          -->
+
+          <% valeur =
+               if valeur_originale.is_a?(Hash)
+                 valeur_originale
+               else
+                 {
+                   "quantite" => valeur_originale.to_i
+                 }
+               end %>
+
+
+          <!-- Détermination du produit -->
+          <% produit_id =
+               if valeur["produit_id"].present?
+                 valeur["produit_id"]
+               elsif panier_id.to_s.match?(/\A\d+\z/)
+                 panier_id.to_i
+               end %>
+
+          <% produit = Produit.find_by(id: produit_id) %>
+
+          <% next unless produit %>
+
+
+          <!-- Détermination éventuelle de la taille chaussure -->
+          <% produit_taille =
+               if valeur["produit_taille_id"].present?
+                 ProduitTaille.find_by(
+                   id: valeur["produit_taille_id"]
+                 )
+               end %>
+
+
+          <% quantite =
+               [valeur["quantite"].to_i, 1].max %>
+
+
+          <% remise =
+               valeur["remise"].present? ?
+                 valeur["remise"].to_d :
+                 0.to_d %>
+
+
+          <!-- Prix réellement enregistré dans le panier -->
+          <% prix_unitaire =
+               if valeur["prix"].present?
+
+                 valeur["prix"].to_d
+
+               elsif produit.en_promo? &&
+                     produit.prix_promo.present?
+
+                 produit.prix_promo.to_d
+
+               else
+
+                 produit.prix.to_d
+
+               end %>
+
+
+          <% total_produit =
+               (
+                 prix_unitaire *
+                 quantite *
+                 (1 - remise / 100)
+               ).round(2) %>
+
+
           <% total += total_produit %>
 
+
           <tr class="border-t">
-            <td class="px-4 py-2 text-center"><%= produit.nom %></td>
-            <td class="px-4 py-2 text-center"><%= quantite %></td>
-            <td class="px-4 py-2 whitespace-nowrap">
-              <% if produit.en_promo? && produit.prix_promo.present? %>
-                <span class="relative inline-block text-base text-gray-600 font-medium">
-                  <span class="inline-block"><%= number_to_currency(produit.prix) %></span>
-                  <span style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background-color: red; transform: rotate(-15deg); transform-origin: left center;"></span>
+
+            <!-- ======================================== -->
+            <!-- PRODUIT -->
+            <!-- ======================================== -->
+
+            <td class="px-3 py-2">
+
+              <span class="font-medium">
+                <%= produit.nom %>
+              </span>
+
+              <% if produit_taille.present? %>
+                <div class="text-xs text-gray-500">
+                  Code :
+                  <%= produit_taille.code_barre %>
+                </div>
+              <% end %>
+
+            </td>
+
+
+            <!-- ======================================== -->
+            <!-- TAILLE -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center">
+
+              <% if produit_taille.present? %>
+
+                <span
+                  class="
+                    inline-block
+                    px-2
+                    py-1
+                    rounded
+                    bg-blue-100
+                    text-blue-800
+                    font-semibold
+                  "
+                >
+                  <%= produit_taille.taille %>
                 </span>
-                <span class="ml-2 text-red-600 font-bold text-xl"><%= number_to_currency(produit.prix_promo) %></span>
+
+              <% elsif produit.taille.present? %>
+
+                <%= produit.taille %>
+
               <% else %>
-                <%= number_to_currency(produit.prix) %>
+
+                —
+
               <% end %>
+
             </td>
-            <td class="px-4 py-2 text-center">
-              <%= form_with url: caisse.modifier_remise_ventes_path, method: :post, local: true do %>
-                <%= hidden_field_tag :produit_id, produit.id %>
+
+
+            <!-- ======================================== -->
+            <!-- QUANTITÉ -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center">
+              <%= quantite %>
+            </td>
+
+
+            <!-- ======================================== -->
+            <!-- PRIX -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center whitespace-nowrap">
+
+              <% if produit.en_promo? &&
+                    produit.prix_promo.present? %>
+
+                <span
+                  class="
+                    relative
+                    inline-block
+                    text-base
+                    text-gray-600
+                    font-medium
+                  "
+                >
+
+                  <span class="inline-block">
+                    <%= number_to_currency(produit.prix) %>
+                  </span>
+
+                  <span
+                    style="
+                      position: absolute;
+                      top: 50%;
+                      left: 0;
+                      width: 100%;
+                      height: 2px;
+                      background-color: red;
+                      transform: rotate(-15deg);
+                      transform-origin: left center;
+                    "
+                  ></span>
+
+                </span>
+
+                <span class="ml-1 text-red-600 font-bold">
+                  <%= number_to_currency(prix_unitaire) %>
+                </span>
+
+              <% else %>
+
+                <%= number_to_currency(prix_unitaire) %>
+
+              <% end %>
+
+            </td>
+
+
+            <!-- ======================================== -->
+            <!-- REMISE -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center">
+
+              <%= form_with url: caisse.modifier_remise_ventes_path,
+                    method: :post,
+                    local: true do %>
+
+                <!-- IMPORTANT :
+                     on transmet la clé exacte du panier
+                     ex : "923" ou "taille_5"
+                -->
+                <%= hidden_field_tag :produit_id,
+                      panier_id %>
+
                 <%= select_tag :remise,
-                      options_for_select((0..70).step(10).map { |v| ["#{v} %", v] }, selected: remise.to_i),
-                      class: "w-24 border rounded text-right",
+                      options_for_select(
+                        (0..70).step(10).map { |v|
+                          ["#{v} %", v]
+                        },
+                        selected: remise.to_i
+                      ),
+                      class: "w-20 border rounded text-right",
                       onchange: "this.form.submit();" %>
+
               <% end %>
+
             </td>
-            <td class="px-4 py-2 text-center font-semibold text-green-700"><%= number_to_currency(total_produit) %></td>
-            <td class="px-4 py-2 text-center text-sm text-gray-500">
-              <span class="inline-block px-2 py-1 rounded bg-gray-100 text-gray-600">Stock : <%= produit.stock %></span>
+
+
+            <!-- ======================================== -->
+            <!-- TOTAL LIGNE -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center font-semibold text-green-700">
+
+              <%= number_to_currency(total_produit) %>
+
             </td>
-            <td class="px-4 py-2 text-center">
-              <%= button_to "Retirer", retirer_produit_ventes_path(produit_id: produit.id), method: :post, class: "text-red-600" %>
+
+
+            <!-- ======================================== -->
+            <!-- STOCK -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center text-sm text-gray-500">
+
+              <% if produit_taille.present? %>
+
+                <span
+                  class="
+                    inline-block
+                    px-2
+                    py-1
+                    rounded
+                    bg-gray-100
+                    text-gray-600
+                    whitespace-nowrap
+                  "
+                >
+                  T.<%= produit_taille.taille %> :
+                  <strong><%= produit_taille.stock %></strong>
+                </span>
+
+              <% else %>
+
+                <span
+                  class="
+                    inline-block
+                    px-2
+                    py-1
+                    rounded
+                    bg-gray-100
+                    text-gray-600
+                    whitespace-nowrap
+                  "
+                >
+                  Stock :
+                  <strong><%= produit.stock %></strong>
+                </span>
+
+              <% end %>
+
             </td>
+
+
+            <!-- ======================================== -->
+            <!-- RETIRER -->
+            <!-- ======================================== -->
+
+            <td class="px-2 py-2 text-center">
+
+              <%= button_to "Retirer",
+                    retirer_produit_ventes_path(
+                      produit_id: panier_id
+                    ),
+                    method: :post,
+                    class: "text-red-600 hover:underline" %>
+
+            </td>
+
           </tr>
+
         <% end %>
+
+
+        <!-- ============================================ -->
+        <!-- TOTAL GÉNÉRAL -->
+        <!-- ============================================ -->
 
         <tr class="border-t font-semibold">
-          <td colspan="4" class="px-4 py-2 text-right">Total :</td>
-          <td colspan="3" class="px-4 py-2 text-right">
-            <span id="total-general"><%= number_to_currency(total) %></span>
+
+          <td
+            colspan="5"
+            class="px-4 py-2 text-right"
+          >
+            Total :
           </td>
+
+          <td
+            colspan="3"
+            class="px-4 py-2 text-right"
+          >
+
+            <span id="total-general">
+              <%= number_to_currency(total) %>
+            </span>
+
+          </td>
+
         </tr>
+
       </tbody>
+
     </table>
+
   <% end %>
 
-  <!-- 🧾 Remise globale (Enter applique ; ne soumet pas le grand form) -->
+
+  <!-- ================================================== -->
+  <!-- 🧾 REMISE GLOBALE -->
+  <!-- ================================================== -->
+
   <div class="mb-6">
-    <label for="remise_globale_manuel" class="block text-sm font-medium text-gray-700 mb-1">
+
+    <label
+      for="remise_globale_manuel"
+      class="block text-sm font-medium text-gray-700 mb-1"
+    >
       🧾 Remise globale (€)
     </label>
-    <%= number_field_tag :remise_globale_manuel, params[:remise_globale_manuel],
-          step: 0.01, min: 0,
+
+    <%= number_field_tag :remise_globale_manuel,
+          params[:remise_globale_manuel],
+          step: 0.01,
+          min: 0,
           class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
           oninput: "majResteAPayer()" %>
+
   </div>
 
-  <!-- 🧾 Résumé avec avoir -->
+
+  <!-- ================================================== -->
+  <!-- 🧾 RÉSUMÉ AVOIR -->
+  <!-- ================================================== -->
+
   <% reste_apres_avoir = total %>
-  <% if params[:avoir_id].present? && (avoir = Avoir.find_by(id: params[:avoir_id])) %>
+
+  <% if params[:avoir_id].present? &&
+        (avoir = Avoir.find_by(id: params[:avoir_id])) %>
+
     <% reste_apres_avoir -= avoir.montant %>
+
     <div class="bg-yellow-100 text-yellow-900 px-4 py-3 rounded mb-4">
-      Avoir utilisé : <strong><%= number_to_currency(avoir.montant) %></strong><br>
+
+      Avoir utilisé :
+      <strong>
+        <%= number_to_currency(avoir.montant) %>
+      </strong>
+
+      <br>
+
       <% if reste_apres_avoir <= 0 %>
+
         ✅ Le total est couvert par l’avoir.
+
         <% if reste_apres_avoir < 0 %>
-          Un nouvel avoir sera émis pour <strong><%= number_to_currency(-reste_apres_avoir) %></strong>.
+
+          Un nouvel avoir sera émis pour
+
+          <strong>
+            <%= number_to_currency(-reste_apres_avoir) %>
+          </strong>.
+
         <% end %>
+
       <% else %>
-        💳 Reste à payer après avoir : <strong><%= number_to_currency(reste_apres_avoir) %></strong>
+
+        💳 Reste à payer après avoir :
+
+        <strong>
+          <%= number_to_currency(reste_apres_avoir) %>
+        </strong>
+
       <% end %>
+
     </div>
+
   <% end %>
 
-  <!-- 💰 Paiement -->
-  <%= form_with url: ventes_path, method: :post, local: true, html: { id: "encaissement-form" } do %>
-    <!-- Hidden: gardés à jour par JS -->
-    <%= hidden_field_tag :reste_value, nil, id: "reste_value" %>
-    <%= hidden_field_tag :avoir_id, params[:avoir_id] %>
-    <%= hidden_field_tag :remise_globale_manuel, nil, id: "hidden_remise_globale_manuel" %>
+
+  <!-- ================================================== -->
+  <!-- 💰 ENCAISSEMENT -->
+  <!-- ================================================== -->
+
+  <%= form_with url: ventes_path,
+        method: :post,
+        local: true,
+        html: {
+          id: "encaissement-form"
+        } do %>
+
+
+    <!-- Valeurs techniques -->
+    <%= hidden_field_tag :reste_value,
+          nil,
+          id: "reste_value" %>
+
+    <%= hidden_field_tag :avoir_id,
+          params[:avoir_id] %>
+
+    <%= hidden_field_tag :remise_globale_manuel,
+          nil,
+          id: "hidden_remise_globale_manuel" %>
+
+
+    <!-- ================================================== -->
+    <!-- CLIENT -->
+    <!-- ================================================== -->
 
     <div class="mb-4">
-      <label class="block font-medium text-gray-700 mb-1">Client</label>
+
+      <label class="block font-medium text-gray-700 mb-1">
+        Client
+      </label>
+
       <div class="flex items-center gap-2">
-        <%= text_field_tag :client_nom, params[:client_nom], list: "clients_list",
+
+        <%= text_field_tag :client_nom,
+              params[:client_nom],
+              list: "clients_list",
               class: "flex-1 rounded border border-gray-300 shadow-sm px-2 py-1",
               placeholder: "Nom du client (ou vide pour sans client)" %>
 
-        <!-- 👇 l’ID du client réel (unique dans ce form) -->
-        <%= hidden_field_tag :client_id, params[:client_id], id: "client_id" %>
 
-        <%= link_to "➕ Nouveau client", main_app.new_client_path(retour: "ventes"),
-              data: { turbo_frame: "client_form" },
+        <%= hidden_field_tag :client_id,
+              params[:client_id],
+              id: "client_id" %>
+
+
+        <%= link_to "➕ Nouveau client",
+              main_app.new_client_path(
+                retour: "ventes"
+              ),
+              data: {
+                turbo_frame: "client_form"
+              },
               class: "whitespace-nowrap px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" %>
+
       </div>
 
+
       <datalist id="clients_list">
+
         <% Client.order(:nom).pluck(:nom, :id).each do |nom, id| %>
-          <option value="<%= nom %>" data-id="<%= id %>"></option>
+
+          <option
+            value="<%= nom %>"
+            data-id="<%= id %>"
+          ></option>
+
         <% end %>
+
       </datalist>
+
     </div>
 
-    <!-- JS: associe l’ID du client au nom saisi (scopé au grand form) -->
+
+    <!-- ================================================== -->
+    <!-- JS CLIENT -->
+    <!-- ================================================== -->
+
     <script>
       (function() {
-        const form   = document.getElementById('encaissement-form');
+
+        const form =
+          document.getElementById("encaissement-form");
+
         if (!form) return;
 
-        const input  = form.querySelector('input[name="client_nom"]');
-        const hidden = form.querySelector('#client_id');
-        const list   = document.getElementById('clients_list');
+
+        const input =
+          form.querySelector(
+            'input[name="client_nom"]'
+          );
+
+
+        const hidden =
+          form.querySelector("#client_id");
+
+
+        const list =
+          document.getElementById("clients_list");
+
+
         if (!input || !hidden || !list) return;
 
+
         function setIdFromValue() {
-          const v = (input.value || '').trim().toLowerCase();
-          let id = '';
-          const options = list.querySelectorAll('option');
-          for (const opt of options) {
-            if ((opt.value || '').trim().toLowerCase() === v) {
-              id = opt.dataset.id || '';
+
+          const value =
+            (input.value || "")
+              .trim()
+              .toLowerCase();
+
+
+          let id = "";
+
+
+          const options =
+            list.querySelectorAll("option");
+
+
+          for (const option of options) {
+
+            if (
+              (option.value || "")
+                .trim()
+                .toLowerCase() === value
+            ) {
+
+              id =
+                option.dataset.id || "";
+
               break;
             }
           }
-          hidden.value = id; // vide si pas de correspondance exacte
+
+
+          hidden.value = id;
         }
 
-        input.addEventListener('input',  setIdFromValue);
-        input.addEventListener('change', setIdFromValue);
-        input.addEventListener('blur',   setIdFromValue);
+
+        input.addEventListener(
+          "input",
+          setIdFromValue
+        );
+
+        input.addEventListener(
+          "change",
+          setIdFromValue
+        );
+
+        input.addEventListener(
+          "blur",
+          setIdFromValue
+        );
+
       })();
     </script>
 
+
+    <!-- ================================================== -->
+    <!-- 💳 MODES DE PAIEMENT -->
+    <!-- ================================================== -->
+
     <div class="mb-6">
-      <label class="block text-lg font-semibold text-gray-800 mb-3">💳 Modes de paiement</label>
+
+      <label class="block text-lg font-semibold text-gray-800 mb-3">
+        💳 Modes de paiement
+      </label>
+
+
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+
+        <!-- CB -->
         <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
-          <label for="cb" class="block text-sm text-gray-600 mb-1">💳 CB</label>
-          <%= number_field_tag :cb, params[:cb], step: 0.01, min: 0, id: "cb",
+
+          <label
+            for="cb"
+            class="block text-sm text-gray-600 mb-1"
+          >
+            💳 CB
+          </label>
+
+          <%= number_field_tag :cb,
+                params[:cb],
+                step: 0.01,
+                min: 0,
+                id: "cb",
                 class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
                 oninput: "majResteAPayer()" %>
+
         </div>
 
+
+        <!-- ESPÈCES -->
         <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
-          <label for="espece" class="block text-sm text-gray-600 mb-1">💶 Espèces</label>
-          <%= number_field_tag :espece, params[:espece], step: 0.01, min: 0, id: "espece",
+
+          <label
+            for="espece"
+            class="block text-sm text-gray-600 mb-1"
+          >
+            💶 Espèces
+          </label>
+
+          <%= number_field_tag :espece,
+                params[:espece],
+                step: 0.01,
+                min: 0,
+                id: "espece",
                 class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
                 oninput: "majResteAPayer()" %>
+
         </div>
 
+
+        <!-- CHÈQUE -->
         <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
-          <label for="cheque" class="block text-sm text-gray-600 mb-1">🧾 Chèque</label>
-          <%= number_field_tag :cheque, params[:cheque], step: 0.01, min: 0, id: "cheque",
+
+          <label
+            for="cheque"
+            class="block text-sm text-gray-600 mb-1"
+          >
+            🧾 Chèque
+          </label>
+
+          <%= number_field_tag :cheque,
+                params[:cheque],
+                step: 0.01,
+                min: 0,
+                id: "cheque",
                 class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
                 oninput: "majResteAPayer()" %>
+
         </div>
 
+
+        <!-- AMEX -->
         <div class="bg-white border border-gray-300 rounded-lg p-3 shadow-sm">
-          <label for="amex" class="block text-sm text-gray-600 mb-1">🏦 AMEX</label>
-          <%= number_field_tag :amex, params[:amex], step: 0.01, min: 0, id: "amex",
+
+          <label
+            for="amex"
+            class="block text-sm text-gray-600 mb-1"
+          >
+            🏦 AMEX
+          </label>
+
+          <%= number_field_tag :amex,
+                params[:amex],
+                step: 0.01,
+                min: 0,
+                id: "amex",
                 class: "w-full p-2 border border-gray-300 rounded-md text-right font-semibold",
                 oninput: "majResteAPayer()" %>
+
         </div>
+
       </div>
+
     </div>
 
-    <% total_paye = (params[:cb]||0).to_d + (params[:espece]||0).to_d + (params[:cheque]||0).to_d + (params[:amex]||0).to_d %>
-    <% reste = (reste_apres_avoir || total) - total_paye %>
+
+    <!-- ================================================== -->
+    <!-- RESTE / RENDU -->
+    <!-- ================================================== -->
+
+    <% total_paye =
+         (params[:cb] || 0).to_d +
+         (params[:espece] || 0).to_d +
+         (params[:cheque] || 0).to_d +
+         (params[:amex] || 0).to_d %>
+
+
+    <% reste =
+         (reste_apres_avoir || total) -
+         total_paye %>
+
 
     <div class="mt-6 p-4 bg-gray-100 border border-gray-300 rounded-lg">
+
       <div class="grid grid-cols-2 gap-4 items-center">
+
         <div>
-          <span class="block text-sm text-gray-600">💶 Rendre</span>
-          <span id="rendre" class="text-2xl font-bold text-green-700">0,00 €</span>
+
+          <span class="block text-sm text-gray-600">
+            💶 Rendre
+          </span>
+
+          <span
+            id="rendre"
+            class="text-2xl font-bold text-green-700"
+          >
+            0,00 €
+          </span>
+
         </div>
+
+
         <div class="text-right">
-          <span class="block text-sm text-gray-600">💳 Reste à payer</span>
-          <span id="reste-a-payer" class="text-2xl font-bold text-green-700"><%= number_to_currency(reste) %></span>
+
+          <span class="block text-sm text-gray-600">
+            💳 Reste à payer
+          </span>
+
+          <span
+            id="reste-a-payer"
+            class="text-2xl font-bold text-green-700"
+          >
+            <%= number_to_currency(reste) %>
+          </span>
+
         </div>
+
       </div>
+
     </div>
 
-    <!-- JS de recalcul + MAJ du hidden reste_value -->
+
+    <!-- ================================================== -->
+    <!-- JS CALCUL PAIEMENT -->
+    <!-- ================================================== -->
+
     <script>
+
       function majResteAPayer() {
-        // total "brut" issu des lignes
-        let total = <%= total || 0 %>;
 
-        // 1) lire la remise globale (champ visible) et l’appliquer
-        const remiseGlobale = parseFloat(document.getElementById("remise_globale_manuel")?.value) || 0;
-        const totalNet = Math.max(total - remiseGlobale, 0);
+        let total =
+          <%= total || 0 %>;
 
-        // 2) pousser la remise dans le hidden du form d’encaissement
-        const hiddenRemise = document.getElementById("hidden_remise_globale_manuel");
-        if (hiddenRemise) hiddenRemise.value = remiseGlobale;
 
-        // 3) tenir compte d’un avoir choisi
-        let totalApresAvoir = totalNet;
-        <% if params[:avoir_id].present? && (avoir = Avoir.find_by(id: params[:avoir_id])) %>
-          totalApresAvoir = Math.max(totalNet - <%= avoir.montant %>, 0);
+        // ----------------------------------------------
+        // Remise globale
+        // ----------------------------------------------
+
+        const remiseGlobale =
+          parseFloat(
+            document
+              .getElementById(
+                "remise_globale_manuel"
+              )
+              ?.value
+          ) || 0;
+
+
+        const totalNet =
+          Math.max(
+            total - remiseGlobale,
+            0
+          );
+
+
+        const hiddenRemise =
+          document.getElementById(
+            "hidden_remise_globale_manuel"
+          );
+
+
+        if (hiddenRemise) {
+          hiddenRemise.value =
+            remiseGlobale;
+        }
+
+
+        // ----------------------------------------------
+        // Avoir
+        // ----------------------------------------------
+
+        let totalApresAvoir =
+          totalNet;
+
+
+        <% if params[:avoir_id].present? &&
+              (avoir = Avoir.find_by(id: params[:avoir_id])) %>
+
+          totalApresAvoir =
+            Math.max(
+              totalNet - <%= avoir.montant %>,
+              0
+            );
+
         <% end %>
 
-        // 4) paiements saisis
-        const cb     = parseFloat(document.getElementById("cb")?.value) || 0;
-        const espece = parseFloat(document.getElementById("espece")?.value) || 0;
-        const cheque = parseFloat(document.getElementById("cheque")?.value) || 0;
-        const amex   = parseFloat(document.getElementById("amex")?.value) || 0;
 
-        const total_paye = cb + espece + cheque + amex;
+        // ----------------------------------------------
+        // Paiements
+        // ----------------------------------------------
 
-        // 5) calculs finaux
-        const reste = Math.max(totalApresAvoir - total_paye, 0);
-        const rendu = Math.max(espece - (totalApresAvoir - cb - cheque - amex), 0);
+        const cb =
+          parseFloat(
+            document
+              .getElementById("cb")
+              ?.value
+          ) || 0;
 
-        // 6) MAJ affichage
-        const totalEl = document.getElementById("total-general");
-        if (totalEl) totalEl.textContent = totalNet.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
-        const resteEl = document.getElementById("reste-a-payer");
-        if (resteEl) resteEl.textContent = reste.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+        const espece =
+          parseFloat(
+            document
+              .getElementById("espece")
+              ?.value
+          ) || 0;
 
-        const renduEl = document.getElementById("rendre");
-        if (renduEl) renduEl.textContent = rendu.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
-        // 7) Guard Enter : garder la valeur numérique pour le submit listener
-        const resteHidden = document.getElementById("reste_value");
-        if (resteHidden) resteHidden.value = reste.toFixed(2);
+        const cheque =
+          parseFloat(
+            document
+              .getElementById("cheque")
+              ?.value
+          ) || 0;
+
+
+        const amex =
+          parseFloat(
+            document
+              .getElementById("amex")
+              ?.value
+          ) || 0;
+
+
+        const totalPaye =
+          cb +
+          espece +
+          cheque +
+          amex;
+
+
+        // ----------------------------------------------
+        // Reste
+        // ----------------------------------------------
+
+        const reste =
+          Math.max(
+            totalApresAvoir -
+            totalPaye,
+            0
+          );
+
+
+        // ----------------------------------------------
+        // Monnaie à rendre
+        // ----------------------------------------------
+
+        const rendu =
+          Math.max(
+            espece -
+            (
+              totalApresAvoir -
+              cb -
+              cheque -
+              amex
+            ),
+            0
+          );
+
+
+        // ----------------------------------------------
+        // Affichage total
+        // ----------------------------------------------
+
+        const totalEl =
+          document.getElementById(
+            "total-general"
+          );
+
+
+        if (totalEl) {
+
+          totalEl.textContent =
+            totalNet.toLocaleString(
+              "fr-FR",
+              {
+                style: "currency",
+                currency: "EUR"
+              }
+            );
+        }
+
+
+        // ----------------------------------------------
+        // Affichage reste
+        // ----------------------------------------------
+
+        const resteEl =
+          document.getElementById(
+            "reste-a-payer"
+          );
+
+
+        if (resteEl) {
+
+          resteEl.textContent =
+            reste.toLocaleString(
+              "fr-FR",
+              {
+                style: "currency",
+                currency: "EUR"
+              }
+            );
+        }
+
+
+        // ----------------------------------------------
+        // Affichage rendu
+        // ----------------------------------------------
+
+        const renduEl =
+          document.getElementById(
+            "rendre"
+          );
+
+
+        if (renduEl) {
+
+          renduEl.textContent =
+            rendu.toLocaleString(
+              "fr-FR",
+              {
+                style: "currency",
+                currency: "EUR"
+              }
+            );
+        }
+
+
+        // ----------------------------------------------
+        // Hidden reste
+        // ----------------------------------------------
+
+        const resteHidden =
+          document.getElementById(
+            "reste_value"
+          );
+
+
+        if (resteHidden) {
+          resteHidden.value =
+            reste.toFixed(2);
+        }
       }
 
-      document.addEventListener("DOMContentLoaded", majResteAPayer);
-      document.addEventListener("turbo:load", majResteAPayer);
+
+      document.addEventListener(
+        "DOMContentLoaded",
+        majResteAPayer
+      );
+
+
+      document.addEventListener(
+        "turbo:load",
+        majResteAPayer
+      );
+
     </script>
 
+
+    <!-- ================================================== -->
+    <!-- ENCAISSER -->
+    <!-- ================================================== -->
+
     <div class="text-right mt-6">
-      <button type="button" id="encaisser-btn"
-        class="w-full bg-green-600 text-white font-semibold text-lg py-3 rounded hover:bg-green-700">
+
+      <button
+        type="button"
+        id="encaisser-btn"
+        class="w-full bg-green-600 text-white font-semibold text-lg py-3 rounded hover:bg-green-700"
+      >
         💳 Encaisser maintenant
       </button>
 
-      <% if @vente && @vente.errors.any? %>
-        <div class="mt-4 p-3 rounded bg-red-50 text-red-700 border border-red-200" role="alert">
+
+      <% if @vente &&
+            @vente.errors.any? %>
+
+        <div
+          class="mt-4 p-3 rounded bg-red-50 text-red-700 border border-red-200"
+          role="alert"
+        >
+
           <ul class="list-disc pl-5">
-            <% @vente.errors.full_messages.each do |m| %>
-              <li><%= m %></li>
+
+            <% @vente.errors.full_messages.each do |message| %>
+
+              <li>
+                <%= message %>
+              </li>
+
             <% end %>
+
           </ul>
+
         </div>
+
       <% end %>
+
     </div>
+
   <% end %>
+
 </div>
 
-<!-- Guards : Enter n’est autorisé que si reste == 0 ; clic bouton toujours OK -->
+
+<!-- ================================================== -->
+<!-- GUARD ENCAISSEMENT -->
+<!-- ================================================== -->
+
 <script>
+
   (function() {
-    var submitByButton = false;
+
+    let submitByButton = false;
+
 
     function bindEncaissementGuards() {
-      var form = document.getElementById("encaissement-form");
-      var btn  = document.getElementById("encaisser-btn");
+
+      const form =
+        document.getElementById(
+          "encaissement-form"
+        );
+
+
+      const btn =
+        document.getElementById(
+          "encaisser-btn"
+        );
+
+
       if (!form) return;
 
-      // Clic explicite → toujours autorisé (passe par validations serveur)
-      if (btn) {
-        btn.addEventListener("click", function() {
-          submitByButton = true;
-          form.requestSubmit();
-        });
+
+      // Évite plusieurs bindings avec Turbo
+      if (form.dataset.guardInstalled) {
+        return;
       }
 
-      // Toute tentative de submit (Enter, etc.) dans CE form :
-      form.addEventListener("submit", function(e) {
-        var reste = parseFloat(document.getElementById("reste_value")?.value);
-        if (!submitByButton && (isNaN(reste) || reste > 0.00001)) {
-          e.preventDefault();
-          return false;
+      form.dataset.guardInstalled =
+        "true";
+
+
+      // ----------------------------------------------
+      // Clic bouton
+      // ----------------------------------------------
+
+      if (btn) {
+
+        btn.addEventListener(
+          "click",
+          function() {
+
+            submitByButton = true;
+
+            form.requestSubmit();
+
+          }
+        );
+      }
+
+
+      // ----------------------------------------------
+      // Submit clavier
+      // ----------------------------------------------
+
+      form.addEventListener(
+        "submit",
+        function(event) {
+
+          const reste =
+            parseFloat(
+              document
+                .getElementById(
+                  "reste_value"
+                )
+                ?.value
+            );
+
+
+          if (
+            !submitByButton &&
+            (
+              isNaN(reste) ||
+              reste > 0.00001
+            )
+          ) {
+
+            event.preventDefault();
+
+            return false;
+          }
+
+
+          submitByButton = false;
         }
-        submitByButton = false;
-      });
+      );
     }
 
-    document.addEventListener("DOMContentLoaded", bindEncaissementGuards);
-    document.addEventListener("turbo:load", bindEncaissementGuards);
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      bindEncaissementGuards
+    );
+
+
+    document.addEventListener(
+      "turbo:load",
+      bindEncaissementGuards
+    );
+
   })();
+
 </script>
 
-<!-- Remise globale : Enter applique et passe au champ CB -->
-<script>
-  (function() {
-    const remise = document.getElementById("remise_globale_manuel");
-    if (!remise) return;
 
-    remise.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        majResteAPayer();
-        const cb = document.getElementById("cb");
-        if (cb) cb.focus();
+<!-- ================================================== -->
+<!-- REMISE GLOBALE : ENTER -->
+<!-- ================================================== -->
+
+<script>
+
+  (function() {
+
+    function bindRemiseGlobale() {
+
+      const remise =
+        document.getElementById(
+          "remise_globale_manuel"
+        );
+
+
+      if (!remise) return;
+
+
+      if (remise.dataset.enterInstalled) {
+        return;
       }
-    });
+
+
+      remise.dataset.enterInstalled =
+        "true";
+
+
+      remise.addEventListener(
+        "keydown",
+        function(event) {
+
+          if (event.key === "Enter") {
+
+            event.preventDefault();
+
+            majResteAPayer();
+
+
+            const cb =
+              document.getElementById(
+                "cb"
+              );
+
+
+            if (cb) {
+              cb.focus();
+            }
+          }
+        }
+      );
+    }
+
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      bindRemiseGlobale
+    );
+
+
+    document.addEventListener(
+      "turbo:load",
+      bindRemiseGlobale
+    );
+
   })();
+
 </script>
