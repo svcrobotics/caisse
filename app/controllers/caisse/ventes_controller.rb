@@ -523,6 +523,8 @@ module Caisse
         total_brut:     total_brut.round(2),
         total_net:      total_net.round(2),
         remise_globale: remise_globale.round(2),
+        # Profil approximatif de la cliente pour l'analyse boutique
+        profil_cliente: params[:profil_cliente].presence,
         cb:     cb,
         espece: espece,
         cheque: cheque,
