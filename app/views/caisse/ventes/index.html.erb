@@ -1,7 +1,8 @@
 <div class="max-w-5xl mx-auto p-6">
-  <div class="flex items-center gap-2 p-2 rounded-lg shadow-md <%= Blockchain::Service.chain.valid? ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' %>">
+  <% blockchain_valide = Blockchain::Service.chain.valid? %>
+  <div class="flex items-center gap-2 p-2 rounded-lg shadow-md <%= blockchain_valide ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' %>">
     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <% if Blockchain::Service.chain.valid? %>
+      <% if blockchain_valide %>
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
       <% else %>
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -66,6 +67,20 @@
     <%= submit_tag "📤 Exporter le fichier Excel", class: "bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" %>
   <% end %>
   <br>
+
+  <p class="text-sm text-gray-600 mb-3"><%= @total_ventes %> vente(s) trouvée(s) — page <%= @page %> sur <%= @total_pages %></p>
+  <% if @total_pages > 1 %>
+    <nav aria-label="Pagination des ventes" class="flex flex-wrap items-center gap-3 mb-4">
+      <% filtres = request.query_parameters.except("page") %>
+      <% if @page > 1 %>
+        <%= link_to "← Précédent", ventes_path(filtres.merge(page: @page - 1)), class: "px-3 py-2 border rounded bg-white" %>
+      <% end %>
+      <span>Page <%= @page %> / <%= @total_pages %></span>
+      <% if @page < @total_pages %>
+        <%= link_to "Suivant →", ventes_path(filtres.merge(page: @page + 1)), class: "px-3 py-2 border rounded bg-white" %>
+      <% end %>
+    </nav>
+  <% end %>
 
   <% if @ventes.any? %>
     <div class="grid gap-4">
@@ -149,5 +164,13 @@
     </div>
   <% else %>
     <p class="text-center text-gray-500">Aucune vente enregistrée.</p>
+  <% end %>
+  <% if @total_pages > 1 %>
+    <nav aria-label="Pagination des ventes" class="flex flex-wrap items-center gap-3 mt-4">
+      <% filtres = request.query_parameters.except("page") %>
+      <% if @page > 1 %><%= link_to "← Précédent", ventes_path(filtres.merge(page: @page - 1)), class: "px-3 py-2 border rounded bg-white" %><% end %>
+      <span>Page <%= @page %> / <%= @total_pages %></span>
+      <% if @page < @total_pages %><%= link_to "Suivant →", ventes_path(filtres.merge(page: @page + 1)), class: "px-3 py-2 border rounded bg-white" %><% end %>
+    </nav>
   <% end %>
 </div>
