@@ -75,7 +75,7 @@ module Caisse
 
       if params[:code_barre].present?
         code = correct_scanner_input(params[:code_barre])
-        produit = Produit.find_by(code_barre: code)
+        produit = Produit.find_by(code_barre: code, archive: false)
 
         if produit
           produit.update(stock: 1) if produit.stock <= 0
@@ -263,7 +263,7 @@ module Caisse
         #    vêtements / accessoires / anciens produits
         # --------------------------------------------------
 
-        produit = Produit.find_by(code_barre: code)
+        produit = Produit.find_by(code_barre: code, archive: false)
 
         if produit
           produit.update(stock: 1) if produit.stock <= 0
