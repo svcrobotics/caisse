@@ -24,6 +24,14 @@ module Caisse
         @ventes = @ventes.joins(:client).where("clients.nom LIKE ?", "%#{params[:client_nom]}%")
       end
 
+      # Pagination serveur : ne charger que les ventes visibles.
+      @page = [params[:page].to_i, 1].max
+      @par_page = 30
+      @total_ventes = @ventes.count
+      @total_pages = [(@total_ventes.to_f / @par_page).ceil, 1].max
+      @page = [@page, @total_pages].min
+      @ventes = @ventes.limit(@par_page).offset((@page - 1) * @par_page)
+
       today = Date.current.all_day
       this_month = Date.current.beginning_of_month..Date.current.end_of_month
 
