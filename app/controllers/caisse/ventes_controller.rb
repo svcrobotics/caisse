@@ -77,7 +77,7 @@ module Caisse
         code = correct_scanner_input(params[:code_barre])
         produit = Produit.find_by(code_barre: code, archive: false)
 
-        if produit
+        if produit && !produit.produit_tailles.exists?
           produit.update(stock: 1) if produit.stock <= 0
 
           id = produit.id.to_s
@@ -227,7 +227,7 @@ module Caisse
 
       produit_taille = ProduitTaille.find_by(code_barre: code)
 
-      if produit_taille
+      if produit_taille && !produit_taille.produit.archive?
         produit = produit_taille.produit
 
         # Une ligne de panier doit être unique par taille.
@@ -435,6 +435,15 @@ module Caisse
           if infos["produit_taille_id"].present?
             ProduitTaille.find(infos["produit_taille_id"])
           end
+
+        if produit.archive? || (produit_taille.nil? && produit.produit_tailles.exists?)
+          redirect_to new_vente_path, alert: "Produit archivé ou déclinaison requise : #{produit.nom}."
+          return
+        end
+        if produit_taille.present? && produit_taille.produit_id != produit.id
+          redirect_to new_vente_path, alert: "Déclinaison incorrecte."
+          return
+        end
 
         qte        = infos["quantite"].to_i
         pu         = infos["prix"].to_d
